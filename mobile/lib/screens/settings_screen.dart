@@ -31,8 +31,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _save() async {
     try {
       await _api.updateProfile(nickname: _nicknameCtrl.text);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已保存')));
     } catch (_) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('保存失败')));
     }
   }
@@ -43,8 +45,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       appBar: AppBar(title: const Text('设置')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
-          CircleAvatar(radius: 40, child: Icon(Icons.person, size: 40, color: Theme.of(context).colorScheme.onPrimary),
-            backgroundColor: Theme.of(context).colorScheme.primary),
+          CircleAvatar(
+            radius: 40,
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            child: Icon(Icons.person, size: 40, color: Theme.of(context).colorScheme.onPrimary),
+          ),
           const SizedBox(height: 8),
           Text(_phone ?? '', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey)),
           const SizedBox(height: 16),

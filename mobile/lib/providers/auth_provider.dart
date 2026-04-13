@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/auth_api.dart';
+import '../app_logger.dart';
 
 class AuthState {
   final String? token;
@@ -32,12 +34,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final res = await _api.login(phone, password);
       final prefs = await SharedPreferences.getInstance();
+      final uid = res['user_id']?.toString() ?? '';
       await prefs.setString('token', res['access_token'] as String);
       await prefs.setString('refresh_token', res['refresh_token'] as String);
-      await prefs.setString('user_id', res['user_id'] as String);
+      await prefs.setString('user_id', uid);
       await prefs.setString('phone', phone);
-      state = AuthState(token: res['access_token'] as String, userId: res['user_id'] as String, phone: phone);
+      state = AuthState(token: res['access_token'] as String, userId: uid, phone: phone);
       return true;
+    } on DioException catch (e) {
+      state = state.copyWith(isLoading: false);
+      appLogger.e('[login] ${e.type} ${e.message} ${e.response?.data}');
+      return false;
     } catch (_) {
       state = state.copyWith(isLoading: false);
       return false;
@@ -49,12 +56,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final res = await _api.register(phone, password);
       final prefs = await SharedPreferences.getInstance();
+      final uid = res['user_id']?.toString() ?? '';
       await prefs.setString('token', res['access_token'] as String);
       await prefs.setString('refresh_token', res['refresh_token'] as String);
-      await prefs.setString('user_id', res['user_id'] as String);
+      await prefs.setString('user_id', uid);
       await prefs.setString('phone', phone);
-      state = AuthState(token: res['access_token'] as String, userId: res['user_id'] as String, phone: phone);
+      state = AuthState(token: res['access_token'] as String, userId: uid, phone: phone);
       return true;
+    } on DioException catch (e) {
+      state = state.copyWith(isLoading: false);
+      appLogger.e('[register] ${e.type} ${e.message} ${e.response?.data}');
+      return false;
     } catch (_) {
       state = state.copyWith(isLoading: false);
       return false;

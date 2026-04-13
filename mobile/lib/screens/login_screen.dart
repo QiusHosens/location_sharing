@@ -33,10 +33,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
     if (_phoneCtrl.text.length < 11) { setState(() => _error = '请输入正确的手机号'); return; }
     if (_passwordCtrl.text.isEmpty) { setState(() => _error = '请输入密码'); return; }
     setState(() { _loading = true; _error = null; });
-    final ok = _tab.index == 0
-        ? await ref.read(authProvider.notifier).login(_phoneCtrl.text, _passwordCtrl.text)
-        : await ref.read(authProvider.notifier).register(_phoneCtrl.text, _passwordCtrl.text);
-    if (ok && mounted) { context.go('/'); } else { setState(() { _error = _tab.index == 0 ? '登录失败' : '注册失败'; _loading = false; }); }
+    var ok = false;
+    try {
+      ok = _tab.index == 0
+          ? await ref.read(authProvider.notifier).login(_phoneCtrl.text, _passwordCtrl.text)
+          : await ref.read(authProvider.notifier).register(_phoneCtrl.text, _passwordCtrl.text);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    if (ok) {
+      context.go('/');
+    } else {
+      setState(() => _error = _tab.index == 0 ? '登录失败（请检查网络与接口地址）' : '注册失败（请检查网络与接口地址）');
+    }
   }
 
   @override

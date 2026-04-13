@@ -3,11 +3,37 @@ allprojects {
         google()
         mavenCentral()
     }
+    // 避免 error_prone_annotations 新版本在旧 D8 上 dex 失败（若仍拉取高版本可保留）
+    configurations.configureEach {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == "com.google.errorprone" && details.requested.name == "error_prone_annotations") {
+                details.useVersion("2.23.0")
+            }
+        }
+    }
 }
 
 rootProject.buildDir = "../build"
-subprojects {
-    project.buildDir = "${rootProject.buildDir}/${project.name}"
+subprojects { subproject ->
+    subproject.buildDir = "${rootProject.buildDir}/${subproject.name}"
+    // 仅补丁高德等旧 library：AGP 8+ 需 namespace，且勿对全量子工程 withId（会干扰 Flutter 主工程）
+    if (subproject.name == "amap_flutter_location" || subproject.name == "amap_flutter_map") {
+        subproject.plugins.withId("com.android.library") {
+            subproject.android {
+                def manifestFile = subproject.file("src/main/AndroidManifest.xml")
+                if (manifestFile.exists()) {
+                    def text = manifestFile.getText("UTF-8")
+                    def matcher = text =~ /package="([^"]+)"/
+                    if (matcher.find()) {
+                        def pkg = matcher.group(1)
+                        if (namespace == null || namespace.toString().isEmpty()) {
+                            namespace = pkg
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

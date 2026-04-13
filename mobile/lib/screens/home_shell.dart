@@ -9,11 +9,17 @@ class HomeShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     int currentIndex = 0;
-    if (location == '/family') currentIndex = 1;
-    else if (location == '/sharing') currentIndex = 2;
-    else if (location == '/trajectory') currentIndex = 3;
-    else if (location == '/notifications') currentIndex = 4;
-    else if (location == '/settings') currentIndex = 5;
+    if (location == '/family') {
+      currentIndex = 1;
+    } else if (location == '/sharing') {
+      currentIndex = 2;
+    } else if (location == '/trajectory') {
+      currentIndex = 3;
+    } else if (location == '/notifications') {
+      currentIndex = 4;
+    } else if (location == '/settings') {
+      currentIndex = 5;
+    }
 
     return Scaffold(
       body: child,

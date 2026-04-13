@@ -25,7 +25,11 @@ class _FamilyScreenState extends State<FamilyScreen> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
         FilledButton(onPressed: () async {
-          await _api.createGroup(ctrl.text); Navigator.pop(ctx); _load();
+          await _api.createGroup(ctrl.text);
+          if (!ctx.mounted) return;
+          Navigator.pop(ctx);
+          if (!mounted) return;
+          _load();
         }, child: const Text('创建')),
       ],
     ));
@@ -39,9 +43,17 @@ class _FamilyScreenState extends State<FamilyScreen> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
         FilledButton(onPressed: () async {
-          try { await _api.addMember(groupId, ctrl.text); Navigator.pop(ctx); _load();
+          try {
+            await _api.addMember(groupId, ctrl.text);
+            if (!ctx.mounted) return;
+            Navigator.pop(ctx);
+            if (!mounted) return;
+            _load();
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('成员已添加')));
-          } catch (e) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('添加失败'))); }
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('添加失败')));
+          }
         }, child: const Text('添加')),
       ],
     ));
@@ -64,7 +76,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
                     const SizedBox(width: 8),
                     Text(g['name'] ?? '', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(width: 8),
-                    Chip(label: Text('\人'), visualDensity: VisualDensity.compact),
+                    Chip(label: Text('${members.length}人'), visualDensity: VisualDensity.compact),
                   ]),
                   Row(children: [
                     IconButton(icon: const Icon(Icons.person_add, size: 20), onPressed: () => _showAddMemberDialog(g['id'])),

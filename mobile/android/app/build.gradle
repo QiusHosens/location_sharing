@@ -11,12 +11,13 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = "17"
     }
 
     defaultConfig {
@@ -48,4 +49,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // 与 AGP 8.3 配套的 desugar 版本；flutter_local_notifications 等依赖需开启 desugaring
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
 }

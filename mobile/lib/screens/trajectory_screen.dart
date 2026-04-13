@@ -25,45 +25,88 @@ class _TrajectoryScreenState extends State<TrajectoryScreen> {
         DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59).toUtc().toIso8601String());
       setState(() { _points = res['points'] ?? []; _total = res['total'] ?? 0; });
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('查询失败')));
-    } finally { setState(() => _loading = false); }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _pickDate(bool isStart) async {
-    final picked = await showDatePicker(context: context, initialDate: isStart ? _startDate : _endDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime.now());
-    if (picked != null) setState(() { if (isStart) _startDate = picked; else _endDate = picked; });
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isStart ? _startDate : _endDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now(),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startDate = picked;
+      } else {
+        _endDate = picked;
+      }
+    });
   }
+
+  String _formatDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('历史轨迹')),
       body: Column(children: [
-        Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-          Expanded(child: OutlinedButton.icon(
-            icon: const Icon(Icons.calendar_today, size: 16),
-            label: Text('\/\'),
-            onPressed: () => _pickDate(true))),
-          const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('至')),
-          Expanded(child: OutlinedButton.icon(
-            icon: const Icon(Icons.calendar_today, size: 16),
-            label: Text('\/\'),
-            onPressed: () => _pickDate(false))),
-          const SizedBox(width: 8),
-          FilledButton(onPressed: _loading ? null : _query, child: _loading ? const SizedBox(width: 16, height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('查询')),
-        ])),
-        if (_total > 0) Padding(padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text('共 \ 个轨迹点', style: Theme.of(context).textTheme.bodySmall)),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(_formatDate(_startDate)),
+                onPressed: () => _pickDate(true),
+              ),
+            ),
+            const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('至')),
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(_formatDate(_endDate)),
+                onPressed: () => _pickDate(false),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: _loading ? null : _query,
+              child: _loading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('查询'),
+            ),
+          ]),
+        ),
+        if (_total > 0)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text('共 $_total 个轨迹点', style: Theme.of(context).textTheme.bodySmall),
+          ),
         Expanded(child: _points.isEmpty
           ? const Center(child: Text('暂无轨迹数据', style: TextStyle(color: Colors.grey)))
           : ListView.builder(itemCount: _points.length, itemBuilder: (ctx, i) {
               final p = _points[i];
-              return ListTile(dense: true,
-                leading: CircleAvatar(radius: 14, child: Text('\', style: const TextStyle(fontSize: 10))),
-                title: Text('经度: \  纬度: \'),
-                subtitle: Text(p['recorded_at'] ?? ''),
+              return ListTile(
+                dense: true,
+                leading: CircleAvatar(
+                  radius: 14,
+                  child: Text('${i + 1}', style: const TextStyle(fontSize: 10)),
+                ),
+                title: Text(
+                  '经度: ${p['longitude']}  纬度: ${p['latitude']}',
+                ),
+                subtitle: Text('${p['recorded_at'] ?? ''}'),
               );
             })),
       ]),

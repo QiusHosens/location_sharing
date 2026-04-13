@@ -23,12 +23,12 @@ class LocationApi {
   }
 
   Future<Map<String, dynamic>> getSharedLocation(String userId) async {
-    final res = await _client.get('/location/shared/\');
+    final res = await _client.get('/location/shared/$userId');
     return res['data'];
   }
 
   Future<List<dynamic>> getFamilyLocations(String groupId) async {
-    final res = await _client.get('/location/family/\');
+    final res = await _client.get('/location/family/$groupId');
     return res['data'];
   }
 
@@ -45,7 +45,7 @@ class LocationApi {
   }
 
   Future<void> markRead(String id) async {
-    await _client.put('/notifications/\/read');
+    await _client.put('/notifications/$id/read');
   }
 
   Future<void> markAllRead() async {

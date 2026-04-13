@@ -25,15 +25,15 @@ class UserApi {
   }
 
   Future<void> deleteGroup(String id) async {
-    await _client.delete('/groups/\');
+    await _client.delete('/groups/$id');
   }
 
   Future<void> addMember(String groupId, String phone) async {
-    await _client.post('/groups/\/members', data: {'phone': phone});
+    await _client.post('/groups/$groupId/members', data: {'phone': phone});
   }
 
   Future<void> removeMember(String groupId, String memberId) async {
-    await _client.delete('/groups/\/members/\');
+    await _client.delete('/groups/$groupId/members/$memberId');
   }
 
   Future<List<dynamic>> getSharing() async {
@@ -46,14 +46,14 @@ class UserApi {
   }
 
   Future<void> respondSharing(String id, bool accept) async {
-    await _client.put('/sharing/\/respond', data: {'accept': accept});
+    await _client.put('/sharing/$id/respond', data: {'accept': accept});
   }
 
   Future<void> updateSharing(String id, {bool? isPaused}) async {
-    await _client.put('/sharing/\', data: {if (isPaused != null) 'is_paused': isPaused});
+    await _client.put('/sharing/$id', data: {if (isPaused != null) 'is_paused': isPaused});
   }
 
   Future<void> deleteSharing(String id) async {
-    await _client.delete('/sharing/\');
+    await _client.delete('/sharing/$id');
   }
 }

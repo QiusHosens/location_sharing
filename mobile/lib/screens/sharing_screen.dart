@@ -31,7 +31,7 @@ class _SharingScreenState extends State<SharingScreen> {
             return Card(margin: const EdgeInsets.only(bottom: 8), child: ListTile(
               leading: CircleAvatar(child: Text((s['peer_nickname'] ?? s['peer_phone'] ?? '?')[0])),
               title: Text(s['peer_nickname'] ?? s['peer_phone'] ?? ''),
-              subtitle: Chip(label: Text(statusText), backgroundColor: statusColor.withOpacity(0.1),
+              subtitle: Chip(label: Text(statusText), backgroundColor: statusColor.withValues(alpha: 0.1),
                 labelStyle: TextStyle(color: statusColor), visualDensity: VisualDensity.compact),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (s['status'] == 'pending')
@@ -58,9 +58,17 @@ class _SharingScreenState extends State<SharingScreen> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
         FilledButton(onPressed: () async {
-          try { await _api.requestSharing(ctrl.text); Navigator.pop(ctx); _load();
+          try {
+            await _api.requestSharing(ctrl.text);
+            if (!ctx.mounted) return;
+            Navigator.pop(ctx);
+            if (!mounted) return;
+            _load();
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请求已发送')));
-          } catch (_) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('发送失败'))); }
+          } catch (_) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('发送失败')));
+          }
         }, child: const Text('发送')),
       ],
     ));
