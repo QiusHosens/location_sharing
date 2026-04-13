@@ -15,6 +15,6 @@ sqlx = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
-argon2 = { workspace = true }
+bcrypt = { workspace = true }
 jsonwebtoken = { workspace = true }
 validator = { workspace = true }

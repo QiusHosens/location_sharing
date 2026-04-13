@@ -1,4 +1,3 @@
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use sqlx::PgPool;
 
 use common::error::AppError;
@@ -8,6 +7,7 @@ use crate::dto::*;
 pub struct AdminService;
 
 impl AdminService {
+    /// `password` 为前端传入的 MD5（小写十六进制，32 字符），与库中 bcrypt(MD5(明文)) 比对。
     pub async fn login(db: &PgPool, username: &str, password: &str) -> Result<Admin, AppError> {
         let admin = sqlx::query_as::<_, Admin>(
             "SELECT * FROM admins WHERE username = $1 AND is_active = TRUE"
@@ -17,12 +17,11 @@ impl AdminService {
         .await?
         .ok_or_else(|| AppError::BadRequest("Invalid credentials".into()))?;
 
-        let parsed_hash = PasswordHash::new(&admin.password_hash)
-            .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid password hash in database")))?;
-
-        Argon2::default()
-            .verify_password(password.as_bytes(), &parsed_hash)
+        let ok = bcrypt::verify(password, &admin.password_hash)
             .map_err(|_| AppError::BadRequest("Invalid credentials".into()))?;
+        if !ok {
+            return Err(AppError::BadRequest("Invalid credentials".into()));
+        }
 
         Ok(admin)
     }

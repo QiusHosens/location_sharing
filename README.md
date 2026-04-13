@@ -271,6 +271,51 @@ kubectl apply -k deploy/k8s/
 
 可选：按 `deploy/k8s/ingress.example.yaml` 配置 Ingress。**仅 Kubernetes** 将各 Service 设为 **NodePort（对外端口为 4xxxx，见 `deploy/README.md`）**；默认集群仅允许 30000–32767，使用 4xxxx 时需将 apiserver 的 `--service-node-port-range` 扩到含 **40000–42767**（详见 `deploy/README.md`）。PostgreSQL / EMQX 数据使用节点 **hostPath**。
 
+#### Kubernetes 重启工作负载
+
+命名空间为 `location-sharing`（与 `deploy/k8s/namespace.yaml` 一致）。
+
+**滚动重启单个 Deployment**（更新镜像或配置后最常用）：
+
+```bash
+kubectl rollout restart deployment/backend -n location-sharing
+kubectl rollout restart deployment/admin -n location-sharing
+kubectl rollout restart deployment/web -n location-sharing
+```
+
+**滚动重启 PostgreSQL / Redis / EMQX**（与业务 Deployment 相同，均为 `Deployment` 资源名）：
+
+```bash
+kubectl rollout restart deployment/postgres -n location-sharing
+kubectl rollout restart deployment/redis -n location-sharing
+kubectl rollout restart deployment/emqx -n location-sharing
+```
+
+说明：PostgreSQL 重启会短暂中断连接，数据在 **hostPath**（`/data/location-sharing/postgres`）上仍会保留；Redis 重启若未挂持久卷则内存数据会清空（本仓库 Redis Deployment 未挂 PVC，仅适合开发/缓存场景）；EMQX 重启会短暂影响 MQTT 连接。
+
+**重启命名空间内全部 Deployment**（会连 PostgreSQL、Redis、EMQX 一并滚动重启，生产环境请谨慎）：
+
+```bash
+kubectl rollout restart deployment --all -n location-sharing
+```
+
+**查看滚动是否完成**：
+
+```bash
+kubectl rollout status deployment/backend -n location-sharing
+```
+
+**不经过 rollout、直接删 Pod 触发重建**（一般由 Deployment 自动拉起新 Pod）：
+
+```bash
+kubectl delete pod -l app=backend -n location-sharing
+kubectl delete pod -l app=postgres -n location-sharing
+kubectl delete pod -l app=redis -n location-sharing
+kubectl delete pod -l app=emqx -n location-sharing
+```
+
+更多说明见 `deploy/README.md`。
+
 ## 隐私与合规
 
 - 位置共享必须双方同意

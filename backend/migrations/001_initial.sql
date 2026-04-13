@@ -118,12 +118,11 @@ CREATE INDEX idx_call_logs_callee ON call_logs(callee_id, started_at DESC);
 
 -- ==================== Default Data ====================
 
--- Default admin user (password: admin123)
--- Argon2 hash placeholder - regenerate in production
+-- Default admin user（明文 admin123；前端传 MD5 hex；库存 bcrypt(MD5(明文))）
 INSERT INTO admins (username, password_hash, nickname, is_active)
 VALUES (
     'admin',
-    '$argon2id$v=19$m=19456,t=2,p=1$YWRtaW4xMjNzYWx0$dGhpc2lzYXBsYWNlaG9sZGVyaGFzaHZhbHVl',
+    '$2b$12$0Y/Cs/YllONoQgMH3IgOPOh3j5z7qgGeVQdujh25kTxBf4K/SU/em',
     'System Admin',
     TRUE
 ) ON CONFLICT (username) DO NOTHING;

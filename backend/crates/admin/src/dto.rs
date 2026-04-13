@@ -6,6 +6,7 @@ use validator::Validate;
 pub struct AdminLoginReq {
     #[validate(length(min = 1))]
     pub username: String,
+    /// 前端对明文口令的 MD5（小写十六进制 32 字符）
     #[validate(length(min = 1))]
     pub password: String,
 }

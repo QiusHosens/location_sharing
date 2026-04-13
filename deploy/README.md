@@ -112,6 +112,22 @@ docker compose -f deploy/docker/docker-compose.yml up -d --build
 
 6. 若使用云厂商负载均衡或域名，可再配置 `ingress.example.yaml`。
 
+## Kubernetes 重启
+
+命名空间：`location-sharing`。
+
+| 场景 | 命令 |
+|------|------|
+| 滚动重启后端 / 管理端 / 用户 Web | `kubectl rollout restart deployment/backend -n location-sharing`（将 `backend` 换成 `admin` 或 `web`） |
+| 滚动重启 **PostgreSQL** | `kubectl rollout restart deployment/postgres -n location-sharing` |
+| 滚动重启 **Redis** | `kubectl rollout restart deployment/redis -n location-sharing` |
+| 滚动重启 **EMQX** | `kubectl rollout restart deployment/emqx -n location-sharing` |
+| 重启命名空间内**所有** Deployment | `kubectl rollout restart deployment --all -n location-sharing`（含 postgres、redis、emqx，生产慎用） |
+| 查看某 Deployment 滚动进度 | `kubectl rollout status deployment/postgres -n location-sharing`（资源名可换） |
+| 删除 Pod 强制重建 | `kubectl delete pod -l app=postgres -n location-sharing`（`app` 可取 `postgres` / `redis` / `emqx` / `backend` 等，与清单中 `spec.selector` 一致） |
+
+**注意**：PostgreSQL 重启会短暂断连，数据在节点 **hostPath** 上保留。Redis 本清单未挂持久卷，重启后内存数据会丢失。EMQX 重启会短暂影响 MQTT。更新业务镜像时通常只需重启 `backend`、`admin`、`web`；中间件仅在改配置或排障时再重启。
+
 ## 后端健康检查
 
 API 暴露 `GET /health`（返回纯文本 `ok`），供 Docker Compose / K8s 探针使用。

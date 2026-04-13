@@ -1,4 +1,5 @@
 import axios from 'axios';
+import md5 from 'md5';
 import { useAuthStore } from '@/store/auth';
 
 const client = axios.create({
@@ -26,7 +27,8 @@ client.interceptors.response.use(
 
 export default client;
 
-export async function adminLogin(username: string, password: string) {
+export async function adminLogin(username: string, passwordPlain: string) {
+  const password = md5(passwordPlain);
   const { data } = await client.post('/login', { username, password });
   return data.data as { access_token: string; admin_id: string; username: string };
 }
