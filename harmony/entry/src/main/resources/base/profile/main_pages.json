@@ -1,0 +1,12 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/LoginPage",
+    "pages/MapPage",
+    "pages/FamilyPage",
+    "pages/SharingPage",
+    "pages/TrajectoryPage",
+    "pages/NotificationsPage",
+    "pages/SettingsPage"
+  ]
+}

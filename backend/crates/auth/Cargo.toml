@@ -1,0 +1,23 @@
+[package]
+name = "auth"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+common = { workspace = true }
+axum = { workspace = true }
+axum-extra = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+jsonwebtoken = { workspace = true }
+argon2 = { workspace = true }
+sqlx = { workspace = true }
+redis = { workspace = true }
+rand = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+validator = { workspace = true }
+async-trait = "0.1"

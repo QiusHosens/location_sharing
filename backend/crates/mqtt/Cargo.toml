@@ -1,0 +1,15 @@
+[package]
+name = "mqtt-bridge"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+common = { workspace = true }
+rumqttc = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+uuid = { workspace = true }

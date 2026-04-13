@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/api",
+    "crates/auth",
+    "crates/user",
+    "crates/location",
+    "crates/trajectory",
+    "crates/notification",
+    "crates/admin",
+    "crates/sms",
+    "crates/mqtt",
+    "crates/common",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+axum = { version = "0.7", features = ["macros"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "limit"] }
+tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "migrate"] }
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+rumqttc = "0.24"
+jsonwebtoken = "9"
+argon2 = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+config = "0.14"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+thiserror = "1"
+anyhow = "1"
+rand = "0.8"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+aes-gcm = "0.10"
+validator = { version = "0.18", features = ["derive"] }
+common = { path = "crates/common" }
+auth = { path = "crates/auth" }
+user = { path = "crates/user" }
+location = { path = "crates/location" }
+trajectory = { path = "crates/trajectory" }
+notification = { path = "crates/notification" }
+admin = { path = "crates/admin" }
+sms = { path = "crates/sms" }
+mqtt-bridge = { path = "crates/mqtt" }
