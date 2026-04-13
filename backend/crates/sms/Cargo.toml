@@ -19,4 +19,4 @@ chrono = { workspace = true }
 rand = { workspace = true }
 uuid = { workspace = true }
 async-trait = "0.1"
-sha1 = "0.10"
+sha1 = "0.11"

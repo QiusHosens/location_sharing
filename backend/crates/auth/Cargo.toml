@@ -20,4 +20,3 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 validator = { workspace = true }
-async-trait = "0.1"

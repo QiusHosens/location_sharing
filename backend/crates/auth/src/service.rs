@@ -1,11 +1,11 @@
 use chrono::Utc;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use rand::Rng;
+use rand::prelude::*;
 use redis::AsyncCommands;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::dto::{AdminClaims, Claims, TokenResponse, TokenType};
+use crate::dto::{AdminClaims, Claims, TokenType};
 use common::error::AppError;
 use common::models::User;
 
@@ -13,8 +13,8 @@ pub struct AuthService;
 
 impl AuthService {
     pub fn generate_code() -> String {
-        let mut rng = rand::thread_rng();
-        format!("{:06}", rng.gen_range(0..1_000_000))
+        let mut rng = rand::rng();
+        format!("{:06}", rng.random_range(0..1_000_000u32))
     }
 
     pub async fn store_code(

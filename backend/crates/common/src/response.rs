@@ -14,9 +14,15 @@ impl<T: Serialize> ApiResponse<T> {
     pub fn ok(data: T) -> Self {
         Self { success: true, data: Some(data), message: None }
     }
+}
 
-    pub fn message(msg: impl Into<String>) -> ApiResponse<()> {
-        ApiResponse { success: true, data: None, message: Some(msg.into()) }
+impl ApiResponse<()> {
+    pub fn message(msg: impl Into<String>) -> Self {
+        Self {
+            success: true,
+            data: None,
+            message: Some(msg.into()),
+        }
     }
 }
 

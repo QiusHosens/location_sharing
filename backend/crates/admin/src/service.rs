@@ -1,6 +1,5 @@
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use common::error::AppError;
 use common::models::{Admin, SystemConfig, User};

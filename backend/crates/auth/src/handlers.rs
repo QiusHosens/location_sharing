@@ -6,8 +6,6 @@ use crate::service::AuthService;
 use common::error::AppError;
 use common::response::ApiResponse;
 
-use std::sync::Arc;
-
 /// State required by auth handlers — implemented by AppState via clone fields.
 pub struct AuthHandlerState {
     pub db: sqlx::PgPool,
@@ -18,7 +16,7 @@ pub struct AuthHandlerState {
 }
 
 pub async fn send_code(
-    State(db): State<sqlx::PgPool>,
+    State(_db): State<sqlx::PgPool>,
     State(mut redis): State<redis::aio::ConnectionManager>,
     Json(req): Json<SendCodeReq>,
 ) -> Result<ApiResponse<()>, AppError> {
