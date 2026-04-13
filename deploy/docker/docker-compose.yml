@@ -1,5 +1,5 @@
 # 在仓库根目录执行: docker compose -f deploy/docker/docker-compose.yml up -d --build
-# 或在 deploy/docker 目录执行: docker compose up -d --build
+# 数据目录: 仓库根目录下 data/postgres、data/emqx（见下方 volumes 绑定挂载）
 
 services:
   postgres:
@@ -9,7 +9,8 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: location_sharing
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # 宿主机目录挂载（相对本 compose 文件所在目录的上两级 = 仓库根）
+      - ../../data/postgres:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -33,10 +34,17 @@ services:
     environment:
       EMQX_NAME: emqx
       EMQX_HOST: emqx
+    volumes:
+      - ../../data/emqx/data:/opt/emqx/data
+      - ../../data/emqx/log:/opt/emqx/log
     ports:
-      - "1883:1883"
-      - "8083:8083"
-      - "18083:18083"
+      # EMQX 常用监听端口全部映射到宿主机
+      - "1883:1883"   # MQTT
+      - "8883:8883"   # MQTT/SSL
+      - "8083:8083"   # MQTT/WebSocket
+      - "8084:8084"   # MQTT/WebSocket/SSL
+      - "18083:18083" # Dashboard
+      - "18084:18084" # Dashboard SSL
 
   backend:
     build:
@@ -76,6 +84,3 @@ services:
       - "3000:80"
     depends_on:
       - backend
-
-volumes:
-  postgres_data:

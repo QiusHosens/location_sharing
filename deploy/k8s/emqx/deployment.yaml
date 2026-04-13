@@ -21,15 +21,26 @@ spec:
           ports:
             - name: mqtt
               containerPort: 1883
+            - name: mqtt-ssl
+              containerPort: 8883
             - name: ws
               containerPort: 8083
+            - name: wss
+              containerPort: 8084
             - name: dashboard
               containerPort: 18083
+            - name: dashboard-ssl
+              containerPort: 18084
           env:
             - name: EMQX_NAME
               value: emqx
             - name: EMQX_HOST
               value: "127.0.0.1"
+          volumeMounts:
+            - name: emqx-data
+              mountPath: /opt/emqx/data
+            - name: emqx-log
+              mountPath: /opt/emqx/log
           readinessProbe:
             tcpSocket:
               port: 1883
@@ -37,3 +48,12 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 12
+      volumes:
+        - name: emqx-data
+          hostPath:
+            path: /data/location-sharing/emqx-data
+            type: DirectoryOrCreate
+        - name: emqx-log
+          hostPath:
+            path: /data/location-sharing/emqx-log
+            type: DirectoryOrCreate

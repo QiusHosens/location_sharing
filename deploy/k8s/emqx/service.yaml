@@ -4,15 +4,31 @@ metadata:
   name: emqx
   namespace: location-sharing
 spec:
+  type: NodePort
   selector:
     app: emqx
   ports:
     - name: mqtt
       port: 1883
       targetPort: 1883
+      nodePort: 41883
+    - name: mqtt-ssl
+      port: 8883
+      targetPort: 8883
+      nodePort: 40883
     - name: ws
       port: 8083
       targetPort: 8083
+      nodePort: 40803
+    - name: wss
+      port: 8084
+      targetPort: 8084
+      nodePort: 40804
     - name: dashboard
       port: 18083
       targetPort: 18083
+      nodePort: 41805
+    - name: dashboard-ssl
+      port: 18084
+      targetPort: 18084
+      nodePort: 41806

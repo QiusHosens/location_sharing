@@ -5,7 +5,6 @@ namespace: location-sharing
 
 resources:
   - namespace.yaml
-  - postgres/pvc.yaml
   - postgres/deployment.yaml
   - postgres/service.yaml
   - redis/deployment.yaml

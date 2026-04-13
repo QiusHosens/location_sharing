@@ -20,7 +20,7 @@ deploy/
 │   ├── secrets.example.yaml  # 复制为 secrets.yaml 后修改（勿提交）
 │   ├── kustomization.yaml     # kubectl apply -k
 │   ├── ingress.example.yaml  # Ingress 示例
-│   ├── postgres/             # PVC + Deployment + Service
+│   ├── postgres/             # Deployment（hostPath 数据卷）+ NodePort Service
 │   ├── redis/
 │   ├── emqx/
 │   ├── backend/
@@ -42,6 +42,26 @@ docker compose -f deploy/docker/docker-compose.yml up -d --build
 
 - 后端 `DATABASE_URL` / `REDIS_URL` / `MQTT_*` 已在 compose 中按服务名写死，一般无需改。
 - 自定义 JWT：复制 `deploy/docker/.env.example` 为 `deploy/docker/.env` 并修改变量。
+
+**本地数据目录（绑定挂载）**
+
+| 服务 | 宿主机路径（相对仓库根） | 容器内路径 |
+|------|-------------------------|------------|
+| PostgreSQL | `data/postgres` | `/var/lib/postgresql/data` |
+| EMQX | `data/emqx/data`、`data/emqx/log` | `/opt/emqx/data`、`/opt/emqx/log` |
+
+首次启动前可手动创建目录；Compose 也会在首次写入时创建。`data/` 下内容已加入 `.gitignore`。
+
+**宿主机端口（全部映射）**
+
+| 服务 | 宿主机端口 |
+|------|------------|
+| PostgreSQL | 5432 |
+| Redis | 6379 |
+| EMQX | 1883, 8883, 8083, 8084, 18083, 18084 |
+| Backend API | 8080 |
+| Admin Web | 3001 |
+| User Web | 3000 |
 
 构建说明：
 
@@ -71,7 +91,26 @@ docker compose -f deploy/docker/docker-compose.yml up -d --build
 
 3. 默认使用镜像名 `location-sharing-backend:latest`、`location-sharing-admin:latest`、`location-sharing-web:latest`，需在集群可访问的节点上存在（或推送到私有仓库后修改 Deployment 与 `kustomization.yaml` 的 `images` 覆盖）。
 
-4. 对外暴露：按需创建 `ingress.example.yaml` 或自行配置 `NodePort` / `LoadBalancer`。
+4. **对外访问（仅 Kubernetes）**：以下 **NodePort** 为集群节点上对外访问端口，均为 **4xxxx**；与 Docker Compose / 本地 Vite 的 **3000、3001** 等无关。  
+   **重要**：Kubernetes 默认仅允许 NodePort 落在 **30000–32767**。若 `kubectl apply` 报 NodePort 无效，请在 **kube-apiserver** 增加参数：  
+   `--service-node-port-range=40000-42767`（或包含该范围的区间），并重启控制平面后再应用。
+
+| 服务 | 集群内端口 | NodePort（宿主机） |
+|------|------------|-------------------|
+| postgres | 5432 | 40432 |
+| redis | 6379 | 40379 |
+| emqx | 1883 / 8883 / 8083 / 8084 / 18083 / 18084 | 41883 / 40883 / 40803 / 40804 / 41805 / 41806 |
+| backend | 8080 | 40808 |
+| admin | 80 | 40081 |
+| web | 80 | 40080 |
+
+5. **节点本地磁盘**：PostgreSQL、EMQX 使用 **hostPath**（需在每台运行 Pod 的节点上存在可写目录）：
+
+   - `/data/location-sharing/postgres`
+   - `/data/location-sharing/emqx-data`
+   - `/data/location-sharing/emqx-log`
+
+6. 若使用云厂商负载均衡或域名，可再配置 `ingress.example.yaml`。
 
 ## 后端健康检查
 

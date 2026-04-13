@@ -44,6 +44,8 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
       volumes:
+        # 节点本地目录（请确保节点上路径可写；多副本时需使用共享存储）
         - name: data
-          persistentVolumeClaim:
-            claimName: postgres-data
+          hostPath:
+            path: /data/location-sharing/postgres
+            type: DirectoryOrCreate

@@ -1,3 +1,7 @@
+# Docker Compose 绑定挂载产生的本地数据（保留 data/.gitkeep）
+data/*
+!data/.gitkeep
+
 # 环境变量与密钥（勿提交）
 .env
 .env.local

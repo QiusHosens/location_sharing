@@ -236,8 +236,7 @@ flutter run -d ios   # iOS
 |-------|------|------|
 | location/{user_id}/update | App -> Server | 位置上报 |
 | location/{user_id}/realtime | Server -> Client | 实时位置推送 |
-| 
-otification/{user_id} | Server -> Client | 通知推送 |
+| notification/{user_id} | Server -> Client | 通知推送 |
 
 ## 部署
 
@@ -255,7 +254,9 @@ docker compose -f deploy/docker/docker-compose.yml up -d --build
 - 用户 Web：`http://localhost:3000`
 - 管理后台：`http://localhost:3001`（默认账号见后端迁移/seed）
 - 后端 API：`http://localhost:8080`，健康检查：`GET /health`
-- EMQX Dashboard：`http://localhost:18083`（默认用户名 `admin`，首次启动请按容器日志设置密码）
+- Redis：`localhost:6379`；PostgreSQL：`localhost:5432`
+- EMQX：`1883/8883/8083/8084/18083/18084`（Dashboard：`http://localhost:18083`，默认用户 `admin`，首次启动见容器日志）
+- 数据持久化目录：仓库根目录 `data/postgres`、`data/emqx/data`、`data/emqx/log`（绑定挂载，详见 `deploy/README.md`）
 
 ### Kubernetes（生产）
 
@@ -268,7 +269,7 @@ kubectl apply -f deploy/k8s/secrets.yaml
 kubectl apply -k deploy/k8s/
 ```
 
-可选：按 `deploy/k8s/ingress.example.yaml` 配置 Ingress 与域名。
+可选：按 `deploy/k8s/ingress.example.yaml` 配置 Ingress。**仅 Kubernetes** 将各 Service 设为 **NodePort（对外端口为 4xxxx，见 `deploy/README.md`）**；默认集群仅允许 30000–32767，使用 4xxxx 时需将 apiserver 的 `--service-node-port-range` 扩到含 **40000–42767**（详见 `deploy/README.md`）。PostgreSQL / EMQX 数据使用节点 **hostPath**。
 
 ## 隐私与合规
 
