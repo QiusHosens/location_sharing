@@ -22,6 +22,7 @@ const CONFIG_LABELS: Record<string, string> = {
   trajectory_retention_days: '轨迹保留天数',
   max_family_members: '最大家庭成员数',
   amap_web_key: '高德地图 Web Key',
+  amap_web_secret: '高德地图 Web 安全密钥(securityJsCode)',
   amap_android_key: '高德地图 Android Key',
   amap_ios_key: '高德地图 iOS Key',
   sms_aliyun_access_key_id: '阿里云短信 AccessKeyId',

@@ -176,6 +176,7 @@ flutter run -d ios   # iOS
 | POST | /auth/register | 手机号+密码注册，返回 JWT |
 | POST | /auth/login | 手机号+密码登录，返回 JWT |
 | POST | /auth/refresh | 刷新 access token |
+| GET | /config/map | 高德地图 Key/安全密钥等（公开，无需登录） |
 
 ### 用户
 | 方法 | 路径 | 说明 |

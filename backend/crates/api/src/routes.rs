@@ -3,6 +3,7 @@ use crate::state::AppState;
 
 pub fn create_routes(state: AppState) -> Router {
     Router::new()
+        .route("/config/map", get(user::handlers::get_map_config))
         .nest("/auth", auth_routes())
         .nest("/users", user_routes())
         .nest("/groups", group_routes())

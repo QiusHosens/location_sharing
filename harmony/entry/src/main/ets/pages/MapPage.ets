@@ -17,11 +17,23 @@ struct MapPage {
   @State familyLocations: LocationData[] = [];
   @State tracking: boolean = false;
   @State currentTab: number = 0;
+  @State amapAndroidKey: string = '';
   private locationService: LocationService = new LocationService();
 
   aboutToAppear(): void {
+    this.loadMapConfig();
     this.loadLocations();
     this.startTracking();
+  }
+
+  async loadMapConfig(): Promise<void> {
+    try {
+      const res = await HttpClient.get('/config/map') as Record<string, object>;
+      const data = res['data'] as Record<string, string>;
+      this.amapAndroidKey = data['android_key'] ?? '';
+    } catch (e) {
+      this.amapAndroidKey = '';
+    }
   }
 
   async loadLocations(): Promise<void> {
@@ -58,7 +70,7 @@ struct MapPage {
         Column() {
           Image($r('sys.media.ohos_ic_public_location')).width(48).height(48).fillColor('#2196F3')
           Text('高德地图区域').fontSize(14).fontColor('#999').margin({ top: 8 })
-          Text('需配置高德地图鸿蒙 SDK').fontSize(12).fontColor('#ccc')
+          Text(this.amapAndroidKey ? '已从后台加载高德 Key，可接入鸿蒙 SDK' : '请在管理后台配置 amap_android_key').fontSize(12).fontColor('#ccc')
           if (this.myLng !== 0) {
             Text('经度: ' + this.myLng.toFixed(6)).fontSize(12).margin({ top: 12 })
             Text('纬度: ' + this.myLat.toFixed(6)).fontSize(12)

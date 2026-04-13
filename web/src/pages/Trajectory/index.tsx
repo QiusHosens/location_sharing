@@ -3,9 +3,8 @@ import { Box, Typography, TextField, Button, Card, CardContent, Stack, CircularP
 import { PlayArrow, Stop } from '@mui/icons-material';
 import { getTrajectory } from '@/api/location';
 import { useAuthStore } from '@/store/auth';
+import { loadAmapScript } from '@/utils/amap';
 import dayjs from 'dayjs';
-
-declare global { interface Window { AMap: any; } }
 
 export default function TrajectoryPage() {
   const { userId } = useAuthStore();
@@ -23,13 +22,17 @@ export default function TrajectoryPage() {
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    const checkMap = setInterval(() => {
-      if (window.AMap && mapRef.current) {
-        clearInterval(checkMap);
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadAmapScript();
+        if (cancelled || !mapRef.current || !window.AMap) return;
         mapInstance.current = new window.AMap.Map(mapRef.current, { zoom: 14, viewMode: '2D' });
+      } catch (e) {
+        console.error('轨迹页地图初始化失败', e);
       }
-    }, 200);
-    return () => { clearInterval(checkMap); if (animRef.current) cancelAnimationFrame(animRef.current); };
+    })();
+    return () => { cancelled = true; if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, []);
 
   const handleQuery = async () => {

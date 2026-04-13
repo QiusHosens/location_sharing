@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, CircularProgress, Typography, Fab, Chip, Avatar, Stack } from '@mui/material';
-import { MyLocation, Refresh } from '@mui/icons-material';
+import { Box, CircularProgress, Fab, Chip, Avatar, Stack } from '@mui/material';
+import { Refresh } from '@mui/icons-material';
 import { getLatestLocation, getFamilyLocations } from '@/api/location';
 import { getGroups } from '@/api/user';
 import { useAuthStore } from '@/store/auth';
 import { connectMqtt, disconnectMqtt } from '@/mqtt/client';
-
-declare global { interface Window { AMap: any; } }
+import { loadAmapScript } from '@/utils/amap';
 
 export default function MapPage() {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -17,25 +16,28 @@ export default function MapPage() {
   const [members, setMembers] = useState<any[]>([]);
 
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${import.meta.env.VITE_AMAP_KEY || 'YOUR_AMAP_KEY'}`;
-    script.onload = () => initMap();
-    document.head.appendChild(script);
-    return () => { disconnectMqtt(); };
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadAmapScript();
+        if (cancelled || !mapRef.current || !window.AMap) return;
+        mapInstance.current = new window.AMap.Map(mapRef.current, {
+          zoom: 14, viewMode: '3D',
+          center: [116.397, 39.908],
+        });
+        setLoading(false);
+        await loadLocations();
+        const uid = useAuthStore.getState().userId;
+        if (uid) {
+          connectMqtt(uid, handleLocationUpdate, handleNotification);
+        }
+      } catch (e) {
+        console.error('地图初始化失败', e);
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; disconnectMqtt(); };
   }, []);
-
-  const initMap = async () => {
-    if (!mapRef.current || !window.AMap) return;
-    mapInstance.current = new window.AMap.Map(mapRef.current, {
-      zoom: 14, viewMode: '3D',
-      center: [116.397, 39.908],
-    });
-    setLoading(false);
-    await loadLocations();
-    if (userId) {
-      connectMqtt(userId, handleLocationUpdate, handleNotification);
-    }
-  };
 
   const handleLocationUpdate = (data: any) => {
     updateMarker(data.user_id, data.longitude, data.latitude, data.nickname || data.user_id);

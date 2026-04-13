@@ -130,3 +130,11 @@ pub async fn list_sharing(
     let sharing = UserService::list_sharing(&db, user_id).await?;
     Ok(Json(ApiResponse::ok(sharing)))
 }
+
+/// 无需登录：Web/App 初始化高德地图前拉取 Key / 安全密钥。
+pub async fn get_map_config(
+    State(db): State<sqlx::PgPool>,
+) -> Result<Json<ApiResponse<MapPublicConfig>>, AppError> {
+    let cfg = UserService::get_map_config(&db).await?;
+    Ok(Json(ApiResponse::ok(cfg)))
+}

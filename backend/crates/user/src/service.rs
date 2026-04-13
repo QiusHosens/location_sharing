@@ -4,6 +4,8 @@ use uuid::Uuid;
 
 use common::error::AppError;
 use common::models::{FamilyGroup, FamilyMember, SharingPermission, User};
+use std::collections::HashMap;
+
 use crate::dto::*;
 
 pub struct UserService;
@@ -239,5 +241,36 @@ impl UserService {
         Ok(rows.into_iter().map(|(id, owner_id, viewer_id, status, visible_start, visible_end, is_paused, peer_nickname, peer_phone)| {
             SharingInfo { id, owner_id, viewer_id, status, visible_start, visible_end, is_paused, peer_nickname, peer_phone }
         }).collect())
+    }
+
+    /// 高德地图公开配置（Key 等），供 Web/App 初始化地图前拉取。
+    pub async fn get_map_config(db: &PgPool) -> Result<MapPublicConfig, AppError> {
+        let rows: Vec<(String, serde_json::Value)> = sqlx::query_as(
+            "SELECT key, value FROM system_configs WHERE key IN ('amap_web_key', 'amap_web_secret', 'amap_android_key', 'amap_ios_key')",
+        )
+        .fetch_all(db)
+        .await?;
+
+        let mut m = HashMap::new();
+        for (k, v) in rows {
+            m.insert(k, v);
+        }
+
+        fn take_str(m: &HashMap<String, serde_json::Value>, key: &str) -> String {
+            m.get(key)
+                .map(|v| match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Null => String::new(),
+                    x => x.as_str().unwrap_or("").to_string(),
+                })
+                .unwrap_or_default()
+        }
+
+        Ok(MapPublicConfig {
+            web_key: take_str(&m, "amap_web_key"),
+            web_security_secret: take_str(&m, "amap_web_secret"),
+            android_key: take_str(&m, "amap_android_key"),
+            ios_key: take_str(&m, "amap_ios_key"),
+        })
     }
 }

@@ -62,6 +62,17 @@ pub struct GroupMemberInfo {
     pub role: String,
 }
 
+/// 公开给 Web/App 的高德配置（不含服务端私钥）
+#[derive(Debug, Serialize)]
+pub struct MapPublicConfig {
+    /// Web JS API Key
+    pub web_key: String,
+    /// 高德 JS API 2.0 安全密钥（对应 securityJsCode）
+    pub web_security_secret: String,
+    pub android_key: String,
+    pub ios_key: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct SharingInfo {
     pub id: Uuid,
