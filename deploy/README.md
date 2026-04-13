@@ -1,0 +1,78 @@
+# 部署说明
+
+本目录包含 Docker Compose 与 Kubernetes 清单，用于在本地或集群中运行「定位共享」全栈（PostgreSQL、Redis、EMQX、Rust API、Admin Web、User Web）。
+
+## 目录结构
+
+```
+deploy/
+├── README.md                 # 本文件
+├── docker/
+│   ├── docker-compose.yml    # 一键编排
+│   ├── Dockerfile.backend    # Rust API 镜像
+│   ├── Dockerfile.admin      # 管理端静态资源 + Nginx
+│   ├── Dockerfile.web        # 用户 Web 静态资源 + Nginx
+│   ├── nginx-admin.conf      # Admin：反向代理 /api → backend
+│   ├── nginx-web.conf        # Web：同上
+│   └── .env.example          # JWT 等环境变量示例
+├── k8s/
+│   ├── namespace.yaml
+│   ├── secrets.example.yaml  # 复制为 secrets.yaml 后修改（勿提交）
+│   ├── kustomization.yaml     # kubectl apply -k
+│   ├── ingress.example.yaml  # Ingress 示例
+│   ├── postgres/             # PVC + Deployment + Service
+│   ├── redis/
+│   ├── emqx/
+│   ├── backend/
+│   ├── admin/
+│   └── web/
+└── scripts/
+    ├── build-images.ps1      # Windows（PowerShell）构建镜像
+    └── build-images.sh       # Ubuntu / Linux / macOS（bash）构建镜像
+```
+
+## Docker Compose
+
+**前提**：仓库根目录执行命令；已安装 Docker 与 Docker Compose v2。
+
+```powershell
+cd E:\work\test\location_sharing
+docker compose -f deploy/docker/docker-compose.yml up -d --build
+```
+
+- 后端 `DATABASE_URL` / `REDIS_URL` / `MQTT_*` 已在 compose 中按服务名写死，一般无需改。
+- 自定义 JWT：复制 `deploy/docker/.env.example` 为 `deploy/docker/.env` 并修改变量。
+
+构建说明：
+
+- `backend` 构建上下文为 `backend/`，使用 `deploy/docker/Dockerfile.backend`。
+- `admin` / `web` 构建上下文为仓库根目录，使用 `deploy/docker/Dockerfile.admin` / `Dockerfile.web`。
+
+一键构建三个镜像：
+
+- **Ubuntu / Linux / macOS**：`chmod +x deploy/scripts/build-images.sh && ./deploy/scripts/build-images.sh`
+- **Windows**：`.\deploy\scripts\build-images.ps1`
+
+## Kubernetes
+
+1. 创建命名空间与 Secret（**必须先有 `secrets.yaml`**）：
+
+   ```bash
+   kubectl apply -f deploy/k8s/secrets.yaml
+   ```
+
+   `secrets.yaml` 由 `secrets.example.yaml` 复制而来，务必修改 `database-url` 中的密码、`jwt-secret`、`jwt-admin-secret` 等。
+
+2. 部署全部组件：
+
+   ```bash
+   kubectl apply -k deploy/k8s/
+   ```
+
+3. 默认使用镜像名 `location-sharing-backend:latest`、`location-sharing-admin:latest`、`location-sharing-web:latest`，需在集群可访问的节点上存在（或推送到私有仓库后修改 Deployment 与 `kustomization.yaml` 的 `images` 覆盖）。
+
+4. 对外暴露：按需创建 `ingress.example.yaml` 或自行配置 `NodePort` / `LoadBalancer`。
+
+## 后端健康检查
+
+API 暴露 `GET /health`（返回纯文本 `ok`），供 Docker Compose / K8s 探针使用。

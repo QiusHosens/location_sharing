@@ -241,24 +241,34 @@ otification/{user_id} | Server -> Client | 通知推送 |
 
 ## 部署
 
-### Docker Compose（开发）
+详细说明见 `deploy/README.md`。
+
+### Docker Compose（本地/联调）
+
+在仓库根目录执行（需已安装 Docker 与 Docker Compose）：
 
 ```bash
-cd deploy/docker
-docker-compose up -d
+cp deploy/docker/.env.example deploy/docker/.env   # 可选：自定义 JWT
+docker compose -f deploy/docker/docker-compose.yml up -d --build
 ```
+
+- 用户 Web：`http://localhost:3000`
+- 管理后台：`http://localhost:3001`（默认账号见后端迁移/seed）
+- 后端 API：`http://localhost:8080`，健康检查：`GET /health`
+- EMQX Dashboard：`http://localhost:18083`（默认用户名 `admin`，首次启动请按容器日志设置密码）
 
 ### Kubernetes（生产）
 
+1. 复制 `deploy/k8s/secrets.example.yaml` 为 `deploy/k8s/secrets.yaml`，修改 `database-url`（密码需与 `postgres-password` 一致）、JWT 等。
+2. 构建并推送镜像（或加载到本地集群）：`location-sharing-backend`、`location-sharing-admin`、`location-sharing-web`（见 `deploy/docker/Dockerfile.*`）。
+3. 应用：
+
 ```bash
-cd deploy/k8s
-kubectl apply -f postgres/
-kubectl apply -f redis/
-kubectl apply -f emqx/
-kubectl apply -f backend/
-kubectl apply -f admin/
-kubectl apply -f web/
+kubectl apply -f deploy/k8s/secrets.yaml
+kubectl apply -k deploy/k8s/
 ```
+
+可选：按 `deploy/k8s/ingress.example.yaml` 配置 Ingress 与域名。
 
 ## 隐私与合规
 

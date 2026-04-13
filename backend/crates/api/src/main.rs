@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use axum::Router;
+use axum::{routing::get, Router};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -23,6 +23,7 @@ async fn main() -> anyhow::Result<()> {
         .allow_headers(Any);
 
     let app = Router::new()
+        .route("/health", get(|| async { "ok" }))
         .nest("/api/v1", routes::create_routes(app_state.clone()))
         .layer(cors)
         .layer(TraceLayer::new_for_http());

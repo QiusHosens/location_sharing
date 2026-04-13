@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: location-sharing
+
+resources:
+  - namespace.yaml
+  - postgres/pvc.yaml
+  - postgres/deployment.yaml
+  - postgres/service.yaml
+  - redis/deployment.yaml
+  - redis/service.yaml
+  - emqx/deployment.yaml
+  - emqx/service.yaml
+  - backend/deployment.yaml
+  - backend/service.yaml
+  - admin/deployment.yaml
+  - admin/service.yaml
+  - web/deployment.yaml
+  - web/service.yaml
+
+# 镜像在本地构建后加载到集群，或推送到私有仓库后在此覆盖
+# images:
+#   - name: location-sharing-backend
+#     newName: registry.example.com/location-sharing-backend
+#     newTag: "0.1.0"
