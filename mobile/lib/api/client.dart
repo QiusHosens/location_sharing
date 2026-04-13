@@ -18,7 +18,7 @@ class ApiClient {
       onRequest: (options, handler) async {
         final prefs = await SharedPreferences.getInstance();
         final token = prefs.getString('token');
-        if (token != null) options.headers['Authorization'] = 'Bearer \';
+        if (token != null) options.headers['Authorization'] = 'Bearer $token';
         handler.next(options);
       },
       onError: (error, handler) async {

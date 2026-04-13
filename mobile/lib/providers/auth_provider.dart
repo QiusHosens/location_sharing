@@ -27,20 +27,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
-  Future<void> sendCode(String phone) async {
-    await _api.sendCode(phone);
-  }
-
-  Future<bool> verifyCode(String phone, String code) async {
+  Future<bool> login(String phone, String password) async {
     state = state.copyWith(isLoading: true);
     try {
-      final res = await _api.verifyCode(phone, code);
+      final res = await _api.login(phone, password);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', res['access_token']);
-      await prefs.setString('refresh_token', res['refresh_token']);
-      await prefs.setString('user_id', res['user_id']);
+      await prefs.setString('token', res['access_token'] as String);
+      await prefs.setString('refresh_token', res['refresh_token'] as String);
+      await prefs.setString('user_id', res['user_id'] as String);
       await prefs.setString('phone', phone);
-      state = AuthState(token: res['access_token'], userId: res['user_id'], phone: phone);
+      state = AuthState(token: res['access_token'] as String, userId: res['user_id'] as String, phone: phone);
+      return true;
+    } catch (_) {
+      state = state.copyWith(isLoading: false);
+      return false;
+    }
+  }
+
+  Future<bool> register(String phone, String password) async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final res = await _api.register(phone, password);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', res['access_token'] as String);
+      await prefs.setString('refresh_token', res['refresh_token'] as String);
+      await prefs.setString('user_id', res['user_id'] as String);
+      await prefs.setString('phone', phone);
+      state = AuthState(token: res['access_token'] as String, userId: res['user_id'] as String, phone: phone);
       return true;
     } catch (_) {
       state = state.copyWith(isLoading: false);

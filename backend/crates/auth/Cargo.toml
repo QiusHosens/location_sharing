@@ -13,8 +13,7 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 jsonwebtoken = { workspace = true }
 sqlx = { workspace = true }
-redis = { workspace = true }
-rand = { workspace = true }
+bcrypt = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }

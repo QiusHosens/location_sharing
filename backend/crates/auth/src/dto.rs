@@ -3,17 +3,20 @@ use uuid::Uuid;
 use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
-pub struct SendCodeReq {
+pub struct RegisterReq {
     #[validate(length(min = 11, max = 15, message = "Invalid phone number"))]
     pub phone: String,
+    /// 不做强度校验，仅要求非空
+    #[validate(length(min = 1))]
+    pub password: String,
 }
 
 #[derive(Debug, Deserialize, Validate)]
-pub struct VerifyCodeReq {
-    #[validate(length(min = 11, max = 15))]
+pub struct LoginReq {
+    #[validate(length(min = 11, max = 15, message = "Invalid phone number"))]
     pub phone: String,
-    #[validate(length(equal = 6))]
-    pub code: String,
+    #[validate(length(min = 1))]
+    pub password: String,
 }
 
 #[derive(Debug, Deserialize)]

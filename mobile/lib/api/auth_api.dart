@@ -1,19 +1,16 @@
+import 'package:dio/dio.dart';
 import 'client.dart';
 
 class AuthApi {
-  final _client = ApiClient();
+  final Dio _client = ApiClient().dio;
 
-  Future<void> sendCode(String phone) async {
-    await _client.post('/auth/send-code', data: {'phone': phone});
+  Future<Map<String, dynamic>> register(String phone, String password) async {
+    final res = await _client.post('/auth/register', data: {'phone': phone, 'password': password});
+    return Map<String, dynamic>.from(res.data['data'] as Map);
   }
 
-  Future<Map<String, dynamic>> verifyCode(String phone, String code) async {
-    final res = await _client.post('/auth/verify-code', data: {'phone': phone, 'code': code});
-    return res['data'];
-  }
-
-  Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
-    final res = await _client.post('/auth/refresh', data: {'refresh_token': refreshToken});
-    return res['data'];
+  Future<Map<String, dynamic>> login(String phone, String password) async {
+    final res = await _client.post('/auth/login', data: {'phone': phone, 'password': password});
+    return Map<String, dynamic>.from(res.data['data'] as Map);
   }
 }

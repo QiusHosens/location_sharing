@@ -1,12 +1,12 @@
 import api from './client';
 
-export async function sendCode(phone: string) {
-  const { data } = await api.post('/auth/send-code', { phone });
-  return data;
+export async function register(phone: string, password: string) {
+  const { data } = await api.post('/auth/register', { phone, password });
+  return data.data as { access_token: string; refresh_token: string; user_id: string; is_new_user: boolean; expires_in: number };
 }
 
-export async function verifyCode(phone: string, code: string) {
-  const { data } = await api.post('/auth/verify-code', { phone, code });
+export async function login(phone: string, password: string) {
+  const { data } = await api.post('/auth/login', { phone, password });
   return data.data as { access_token: string; refresh_token: string; user_id: string; is_new_user: boolean; expires_in: number };
 }
 

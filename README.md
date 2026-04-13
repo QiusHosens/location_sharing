@@ -15,7 +15,7 @@
 | 7 | **语音通话** | 一键拨打绑定成员，支持自动接听模式（老人无需操作） |
 | 8 | **隐私控制** | 双方同意才共享，可暂停/撤销/设置可见时段，数据加密传输存储 |
 | 9 | **通知中心** | 位置异常/共享请求/权限变更/系统通知推送，自定义铃声震动 |
-| 10 | **管理后台** | Admin Web 管理高德地图 Key、短信 Key、用户管理、系统配置 |
+| 10 | **管理后台** | Admin Web 管理高德地图 Key、用户管理、系统配置 |
 
 ## 技术栈
 
@@ -24,7 +24,7 @@
 - **数据库**: PostgreSQL 16
 - **缓存**: Redis 7
 - **实时推送**: EMQX 5 (MQTT Broker)
-- **认证**: JWT (access + refresh token) + 手机号验证码登录
+- **认证**: JWT (access + refresh token) + 手机号密码注册/登录
 - **部署**: Docker / Kubernetes
 
 ### 前端 — Admin 管理端
@@ -61,7 +61,7 @@ location_sharing/
 │   │   └── 001_initial.sql
 │   └── crates/
 │       ├── api/             # HTTP 入口 (main binary)
-│       ├── auth/            # 认证 (JWT/验证码/中间件)
+│       ├── auth/            # 认证 (JWT/中间件)
 │       ├── user/            # 用户/家庭组/共享权限
 │       ├── location/        # 位置上报与查询
 │       ├── trajectory/      # 历史轨迹
@@ -173,8 +173,8 @@ flutter run -d ios   # iOS
 ### 认证
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /auth/send-code | 发送短信验证码 |
-| POST | /auth/verify-code | 验证码登录，返回 JWT |
+| POST | /auth/register | 手机号+密码注册，返回 JWT |
+| POST | /auth/login | 手机号+密码登录，返回 JWT |
 | POST | /auth/refresh | 刷新 access token |
 
 ### 用户

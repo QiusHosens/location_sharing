@@ -9,6 +9,9 @@ mod routes;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // 本地开发：从当前工作目录加载 `.env`（不存在则忽略），须早于读取环境变量与 tracing（含 RUST_LOG）
+    let _ = dotenvy::dotenv();
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| "api=debug,tower_http=debug".into()))

@@ -16,8 +16,8 @@ pub fn create_routes(state: AppState) -> Router {
 
 fn auth_routes() -> Router<AppState> {
     Router::new()
-        .route("/send-code", post(auth::handlers::send_code))
-        .route("/verify-code", post(auth::handlers::verify_code))
+        .route("/register", post(auth::handlers::register))
+        .route("/login", post(auth::handlers::login))
         .route("/refresh", post(auth::handlers::refresh_token))
 }
 

@@ -1,7 +1,5 @@
 use chrono::Utc;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use rand::prelude::*;
-use redis::AsyncCommands;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -12,81 +10,47 @@ use common::models::User;
 pub struct AuthService;
 
 impl AuthService {
-    pub fn generate_code() -> String {
-        let mut rng = rand::rng();
-        format!("{:06}", rng.random_range(0..1_000_000u32))
-    }
-
-    pub async fn store_code(
-        redis: &mut redis::aio::ConnectionManager,
-        phone: &str,
-        code: &str,
-        ttl_seconds: u64,
-    ) -> Result<(), AppError> {
-        let key = format!("sms:code:{}", phone);
-        let rate_key = format!("sms:rate:{}", phone);
-
-        let count: Option<i32> = redis.get(&rate_key).await.unwrap_or(None);
-        if count.unwrap_or(0) >= 10 {
-            return Err(AppError::BadRequest("Too many SMS requests today".into()));
-        }
-
-        let _: () = redis.set_ex(&key, code, ttl_seconds).await
+    pub async fn register_user(db: &PgPool, phone: &str, password: &str) -> Result<User, AppError> {
+        let hash = bcrypt::hash(password, bcrypt::DEFAULT_COST)
             .map_err(|e| AppError::Internal(e.into()))?;
 
-        let _: () = redis.incr(&rate_key, 1i32).await
-            .map_err(|e| AppError::Internal(e.into()))?;
-        let ttl: i64 = redis.ttl(&rate_key).await.unwrap_or(-1);
-        if ttl < 0 {
-            let _: () = redis.expire(&rate_key, 86400).await
-                .map_err(|e| AppError::Internal(e.into()))?;
-        }
-
-        Ok(())
-    }
-
-    pub async fn verify_code(
-        redis: &mut redis::aio::ConnectionManager,
-        phone: &str,
-        code: &str,
-    ) -> Result<bool, AppError> {
-        let key = format!("sms:code:{}", phone);
-        let stored: Option<String> = redis.get(&key).await
-            .map_err(|e| AppError::Internal(e.into()))?;
-
-        match stored {
-            Some(stored_code) if stored_code == code => {
-                let _: () = redis.del(&key).await
-                    .map_err(|e| AppError::Internal(e.into()))?;
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
-    }
-
-    pub async fn find_or_create_user(
-        db: &PgPool,
-        phone: &str,
-    ) -> Result<(User, bool), AppError> {
-        let existing = sqlx::query_as::<_, User>(
-            "SELECT * FROM users WHERE phone = $1"
+        let res = sqlx::query_as::<_, User>(
+            "INSERT INTO users (phone, password_hash) VALUES ($1, $2) RETURNING *",
         )
         .bind(phone)
-        .fetch_optional(db)
-        .await?;
-
-        if let Some(user) = existing {
-            return Ok((user, false));
-        }
-
-        let user = sqlx::query_as::<_, User>(
-            "INSERT INTO users (phone) VALUES ($1) RETURNING *"
-        )
-        .bind(phone)
+        .bind(&hash)
         .fetch_one(db)
-        .await?;
+        .await;
 
-        Ok((user, true))
+        match res {
+            Ok(user) => Ok(user),
+            Err(sqlx::Error::Database(ref d)) if d.code().as_deref() == Some("23505") => {
+                Err(AppError::Conflict("该手机号已注册".into()))
+            }
+            Err(e) => Err(AppError::Database(e)),
+        }
+    }
+
+    pub async fn login_user(db: &PgPool, phone: &str, password: &str) -> Result<User, AppError> {
+        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE phone = $1")
+            .bind(phone)
+            .fetch_optional(db)
+            .await?
+            .ok_or_else(|| AppError::BadRequest("手机号或密码错误".into()))?;
+
+        let hash = user
+            .password_hash
+            .as_ref()
+            .filter(|h| !h.is_empty())
+            .ok_or_else(|| AppError::BadRequest("该账号未设置密码，请先注册".into()))?;
+
+        let ok = bcrypt::verify(password, hash)
+            .map_err(|_| AppError::BadRequest("手机号或密码错误".into()))?;
+        if !ok {
+            return Err(AppError::BadRequest("手机号或密码错误".into()));
+        }
+
+        Ok(user)
     }
 
     pub fn generate_tokens(
@@ -107,7 +71,8 @@ impl AuthService {
             &Header::default(),
             &access_claims,
             &EncodingKey::from_secret(jwt_secret.as_bytes()),
-        ).map_err(|e| AppError::Internal(e.into()))?;
+        )
+        .map_err(|e| AppError::Internal(e.into()))?;
 
         let refresh_claims = Claims {
             sub: user_id.to_string(),
@@ -119,7 +84,8 @@ impl AuthService {
             &Header::default(),
             &refresh_claims,
             &EncodingKey::from_secret(jwt_secret.as_bytes()),
-        ).map_err(|e| AppError::Internal(e.into()))?;
+        )
+        .map_err(|e| AppError::Internal(e.into()))?;
 
         Ok((access_token, refresh_token, access_ttl))
     }
@@ -129,7 +95,8 @@ impl AuthService {
             token,
             &DecodingKey::from_secret(secret.as_bytes()),
             &Validation::default(),
-        ).map_err(|_| AppError::Unauthorized)?;
+        )
+        .map_err(|_| AppError::Unauthorized)?;
 
         Ok(token_data.claims)
     }
@@ -139,7 +106,8 @@ impl AuthService {
             token,
             &DecodingKey::from_secret(secret.as_bytes()),
             &Validation::default(),
-        ).map_err(|_| AppError::Unauthorized)?;
+        )
+        .map_err(|_| AppError::Unauthorized)?;
 
         if token_data.claims.token_type != TokenType::AdminAccess {
             return Err(AppError::Unauthorized);
@@ -166,6 +134,7 @@ impl AuthService {
             &Header::default(),
             &claims,
             &EncodingKey::from_secret(secret.as_bytes()),
-        ).map_err(|e| AppError::Internal(e.into()))
+        )
+        .map_err(|e| AppError::Internal(e.into()))
     }
 }
