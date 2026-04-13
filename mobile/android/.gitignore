@@ -1,0 +1,11 @@
+gradle-wrapper.jar
+/.gradle
+/captures/
+/gradlew
+/gradlew.bat
+/local.properties
+GeneratedPluginRegistrant.java
+
+# key.properties 常含签名密码，默认仍忽略；若需一并提交请删除下一行
+key.properties
+# 以下已取消忽略，便于将 *.jks / *.keystore 纳入版本库（请自行评估仓库可见范围）
