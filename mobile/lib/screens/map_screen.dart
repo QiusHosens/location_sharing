@@ -259,7 +259,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  Widget _batteryPill(bool green) {
+  Widget _batteryPill(int? percent, int index) {
+    final green = percent != null ? percent >= 50 : (index % 2 == 0);
+    final label = percent != null ? '$percent%' : '—';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -276,7 +278,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
           const SizedBox(width: 4),
           Text(
-            '—',
+            label,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -296,7 +298,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final name = l['nickname']?.toString() ?? '家人';
     final letter = name.isNotEmpty ? name[0] : '?';
     final timeLabel = _fmtRecordedAt(l['recorded_at']?.toString());
-    final green = index % 2 == 0;
+    final rawBatt = l['battery_level'];
+    final batt = rawBatt is int ? rawBatt : (rawBatt is num ? rawBatt.toInt() : null);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -339,7 +342,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ],
             ),
           ),
-          _batteryPill(green),
+          _batteryPill(batt, index),
           const SizedBox(width: 8),
           Material(
             color: Colors.blue,

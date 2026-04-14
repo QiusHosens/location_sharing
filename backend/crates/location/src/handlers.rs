@@ -4,18 +4,25 @@ use axum::{
 };
 use uuid::Uuid;
 
-use auth::AuthUser;
+use auth::{AuthUser, OptionalAuthUser};
 use common::error::AppError;
 use common::response::ApiResponse;
 use crate::dto::*;
 use crate::service::LocationService;
 
+/// 无需 JWT：未带 `Authorization` 时须在 body 中提供 `user_id`（与移动端上传策略一致）。
 pub async fn upload(
-    AuthUser(user_id): AuthUser,
+    OptionalAuthUser(auth_uid): OptionalAuthUser,
     State(db): State<sqlx::PgPool>,
     State(mut redis): State<redis::aio::ConnectionManager>,
     Json(req): Json<UploadLocationReq>,
 ) -> Result<ApiResponse<()>, AppError> {
+    let user_id = match auth_uid {
+        Some(uid) => uid,
+        None => req.user_id.ok_or_else(|| {
+            AppError::BadRequest("user_id is required when Authorization is absent".into())
+        })?,
+    };
     LocationService::upload(&db, &mut redis, user_id, &req).await?;
     Ok(ApiResponse::message("Location uploaded"))
 }

@@ -10,7 +10,6 @@ import 'screens/sharing_screen.dart';
 import 'screens/trajectory_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/mine_screen.dart';
 import 'screens/home_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -28,7 +27,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: '/', builder: (_, __) => const MapScreen()),
           GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
-          GoRoute(path: '/me', builder: (_, __) => const MineScreen()),
           GoRoute(path: '/trajectory', builder: (_, __) => const TrajectoryScreen()),
           GoRoute(path: '/family', builder: (_, __) => const FamilyScreen()),
           GoRoute(path: '/sharing', builder: (_, __) => const SharingScreen()),

@@ -18,7 +18,7 @@ impl LocationService {
         let recorded_at = req.recorded_at.unwrap_or_else(|| Utc::now());
 
         sqlx::query(
-            "INSERT INTO location_records (user_id, longitude, latitude, altitude, speed, bearing, accuracy, source, recorded_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+            "INSERT INTO location_records (user_id, longitude, latitude, altitude, speed, bearing, accuracy, source, recorded_at, battery_level) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
         )
         .bind(user_id)
         .bind(req.longitude)
@@ -29,6 +29,7 @@ impl LocationService {
         .bind(req.accuracy)
         .bind(&req.source)
         .bind(recorded_at)
+        .bind(req.battery_level)
         .execute(db)
         .await?;
 
@@ -41,6 +42,7 @@ impl LocationService {
             bearing: req.bearing,
             accuracy: req.accuracy,
             recorded_at,
+            battery_level: req.battery_level,
         };
         let json = serde_json::to_string(&cached)
             .map_err(|e| AppError::Internal(e.into()))?;
@@ -65,18 +67,19 @@ impl LocationService {
             return Ok(Some(loc));
         }
 
-        let row = sqlx::query_as::<_, (Uuid, f64, f64, Option<f64>, Option<f32>, Option<f32>, Option<f32>, chrono::DateTime<Utc>)>(
-            "SELECT user_id, longitude, latitude, altitude, speed, bearing, accuracy, recorded_at FROM location_records WHERE user_id = $1 ORDER BY recorded_at DESC LIMIT 1"
+        let row = sqlx::query_as::<_, (Uuid, f64, f64, Option<f64>, Option<f32>, Option<f32>, Option<f32>, chrono::DateTime<Utc>, Option<i16>)>(
+            "SELECT user_id, longitude, latitude, altitude, speed, bearing, accuracy, recorded_at, battery_level FROM location_records WHERE user_id = $1 ORDER BY recorded_at DESC LIMIT 1"
         )
         .bind(user_id)
         .fetch_optional(db)
         .await?;
 
         match row {
-            Some((uid, lng, lat, alt, spd, brg, acc, ts)) => {
+            Some((uid, lng, lat, alt, spd, brg, acc, ts, batt)) => {
                 let loc = CachedLocation {
                     user_id: uid, longitude: lng, latitude: lat,
                     altitude: alt, speed: spd, bearing: brg, accuracy: acc, recorded_at: ts,
+                    battery_level: batt,
                 };
                 let json = serde_json::to_string(&loc).map_err(|e| AppError::Internal(e.into()))?;
                 let _: () = redis.set_ex(&key, &json, 3600).await.map_err(|e| AppError::Internal(e.into()))?;
@@ -132,6 +135,7 @@ impl LocationService {
             bearing: loc.bearing,
             accuracy: loc.accuracy,
             recorded_at: loc.recorded_at,
+            battery_level: loc.battery_level,
         })
     }
 
@@ -180,6 +184,7 @@ impl LocationService {
                     bearing: loc.bearing,
                     accuracy: loc.accuracy,
                     recorded_at: loc.recorded_at,
+                    battery_level: loc.battery_level,
                 });
             }
         }

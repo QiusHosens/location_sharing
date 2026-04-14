@@ -4,7 +4,7 @@ pub mod middleware;
 pub mod dto;
 
 pub use dto::{Claims, TokenType, AdminClaims};
-pub use middleware::{AuthUser, AuthAdmin};
+pub use middleware::{AuthUser, AuthAdmin, OptionalAuthUser};
 pub use service::AuthService;
 
 /// Minimal auth-related state that AppState must provide via AsRef.

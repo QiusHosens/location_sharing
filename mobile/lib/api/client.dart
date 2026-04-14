@@ -78,14 +78,27 @@ class ApiClient {
       onRequest: (options, handler) async {
         final prefs = await SharedPreferences.getInstance();
         final token = prefs.getString('token');
-        if (token != null) options.headers['Authorization'] = 'Bearer $token';
+        final path = options.uri.path;
+        // 定位上传：无需携带 Token，由 body 中的 user_id 标识用户（与后端 OptionalAuth 一致）
+        final isLocationUpload =
+            options.method.toUpperCase() == 'POST' && path.contains('/location/upload');
+        if (token != null && !isLocationUpload) {
+          options.headers['Authorization'] = 'Bearer $token';
+        } else {
+          options.headers.remove('Authorization');
+        }
         handler.next(options);
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          final p = error.requestOptions.path;
+          final p = error.requestOptions.uri.path;
           // 登录/注册失败返回 401 时不应清空会话
           if (p.contains('/auth/login') || p.contains('/auth/register')) {
+            handler.next(error);
+            return;
+          }
+          // 上传接口本身不依赖 Token，401 不应触发登出
+          if (p.contains('/location/upload')) {
             handler.next(error);
             return;
           }
@@ -115,6 +128,29 @@ class ApiClient {
   Future<Map<String, dynamic>> put(String path, {dynamic data}) async {
     final res = await dio.put(path, data: data);
     return res.data;
+  }
+
+  /// 去掉 BaseOptions 里的 JSON Content-Type，由 Dio 为 [FormData] 自动带 multipart boundary。
+  Future<Map<String, dynamic>> postMultipart(String path, FormData data) async {
+    final headers = Map<String, dynamic>.from(dio.options.headers);
+    headers.remove(Headers.contentTypeHeader);
+    headers.remove('content-type');
+    final res = await dio.post<Map<String, dynamic>>(
+      path,
+      data: data,
+      options: Options(headers: headers),
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// 将接口返回的相对路径（如 `avatars/{user_id}`）拼成可访问的完整 URL。
+  /// [BaseOptions.baseUrl] 无尾部 `/` 时，[Uri.resolve] 会错误丢掉最后一级路径，故先规范化。
+  String? resolveMediaUrl(String? path) {
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    final base = dio.options.baseUrl;
+    final normalized = base.endsWith('/') ? base : '$base/';
+    return Uri.parse(normalized).resolve(path).toString();
   }
 
   Future<void> delete(String path) async {

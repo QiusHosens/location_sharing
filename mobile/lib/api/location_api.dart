@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'client.dart';
 
 class LocationApi {
@@ -6,14 +8,20 @@ class LocationApi {
   Future<void> uploadLocation({
     required double longitude, required double latitude,
     double? altitude, double? speed, double? bearing, double? accuracy, String? source,
+    int? batteryLevel,
   }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = prefs.getString('user_id');
     await _client.post('/location/upload', data: {
-      'longitude': longitude, 'latitude': latitude,
+      'longitude': longitude,
+      'latitude': latitude,
+      if (uid != null) 'user_id': uid,
       if (altitude != null) 'altitude': altitude,
       if (speed != null) 'speed': speed,
       if (bearing != null) 'bearing': bearing,
       if (accuracy != null) 'accuracy': accuracy,
       if (source != null) 'source': source,
+      if (batteryLevel != null) 'battery_level': batteryLevel,
     });
   }
 

@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import 'client.dart';
 
 class UserApi {
@@ -13,6 +15,19 @@ class UserApi {
       if (nickname != null) 'nickname': nickname,
       if (avatarUrl != null) 'avatar_url': avatarUrl,
     });
+  }
+
+  /// multipart 字段名 `file`，成功后返回与 [getProfile] 相同结构的 `data`。
+  Future<Map<String, dynamic>> uploadAvatar(String filePath) async {
+    final name = filePath.split(RegExp(r'[/\\]')).last;
+    final form = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: name),
+    });
+    final res = await _client.postMultipart('/users/profile/avatar', form);
+    final d = res['data'];
+    if (d is Map<String, dynamic>) return d;
+    if (d is Map) return Map<String, dynamic>.from(d);
+    return {};
   }
 
   Future<List<dynamic>> getGroups() async {
@@ -69,5 +84,10 @@ class UserApi {
 
   Future<void> deleteSharing(String id) async {
     await _client.delete('/sharing/$id');
+  }
+
+  /// 家庭页：向同家庭成员开启/关闭位置共享（当前用户为 owner，对方为 viewer）
+  Future<void> setSharingPeer(String viewerId, bool enabled) async {
+    await _client.put('/sharing/peer/$viewerId', data: {'enabled': enabled});
   }
 }

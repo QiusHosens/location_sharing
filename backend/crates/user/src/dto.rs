@@ -55,6 +55,12 @@ pub struct UpdateSharingReq {
     pub visible_end: Option<NaiveTime>,
 }
 
+/// 在家庭页开关：是否向同家庭成员共享自己的位置
+#[derive(Debug, Deserialize)]
+pub struct SetPeerSharingReq {
+    pub enabled: bool,
+}
+
 #[derive(Debug, Serialize)]
 pub struct UserProfile {
     pub id: Uuid,

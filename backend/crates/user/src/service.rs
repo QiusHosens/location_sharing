@@ -384,6 +384,51 @@ impl UserService {
         Ok(())
     }
 
+    /// 仅允许互为同一家庭组成员：开启时写入 accepted 且未暂停；关闭时暂停
+    pub async fn set_sharing_with_family_peer(
+        db: &PgPool,
+        owner_id: Uuid,
+        viewer_id: Uuid,
+        enabled: bool,
+    ) -> Result<(), AppError> {
+        if owner_id == viewer_id {
+            return Err(AppError::BadRequest("Cannot share with yourself".into()));
+        }
+
+        let same_family: bool = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM family_members fm1 INNER JOIN family_members fm2 ON fm1.group_id = fm2.group_id WHERE fm1.user_id = $1 AND fm2.user_id = $2)",
+        )
+        .bind(owner_id)
+        .bind(viewer_id)
+        .fetch_one(db)
+        .await?;
+
+        if !same_family {
+            return Err(AppError::Forbidden);
+        }
+
+        if enabled {
+            sqlx::query(
+                r#"INSERT INTO sharing_permissions (owner_id, viewer_id, status, is_paused) VALUES ($1, $2, 'accepted', false)
+                   ON CONFLICT (owner_id, viewer_id) DO UPDATE SET status = 'accepted', is_paused = false, updated_at = NOW()"#,
+            )
+            .bind(owner_id)
+            .bind(viewer_id)
+            .execute(db)
+            .await?;
+        } else {
+            sqlx::query(
+                "UPDATE sharing_permissions SET is_paused = true, updated_at = NOW() WHERE owner_id = $1 AND viewer_id = $2",
+            )
+            .bind(owner_id)
+            .bind(viewer_id)
+            .execute(db)
+            .await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn list_sharing(db: &PgPool, user_id: Uuid) -> Result<Vec<SharingInfo>, AppError> {
         let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, Option<NaiveTime>, Option<NaiveTime>, bool, Option<String>, String)>(
             "SELECT sp.id, sp.owner_id, sp.viewer_id, sp.status, sp.visible_start, sp.visible_end, sp.is_paused, u.nickname, u.phone FROM sharing_permissions sp INNER JOIN users u ON u.id = CASE WHEN sp.owner_id = $1 THEN sp.viewer_id ELSE sp.owner_id END WHERE sp.owner_id = $1 OR sp.viewer_id = $1 ORDER BY sp.created_at DESC"

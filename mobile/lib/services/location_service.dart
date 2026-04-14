@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart' show TargetPlatform;
+import 'package:battery_plus/battery_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -14,6 +15,7 @@ const double _kMinMoveMeters = 5.0;
 
 class LocationService {
   final LocationApi _api = LocationApi();
+  final Battery _battery = Battery();
   StreamSubscription<Position>? _subscription;
   Position? _lastUploaded;
 
@@ -82,6 +84,10 @@ class LocationService {
         if (d < _kMinMoveMeters) return;
       }
       try {
+        int? batt;
+        try {
+          batt = await _battery.batteryLevel;
+        } catch (_) {}
         await _api.uploadLocation(
           longitude: pos.longitude,
           latitude: pos.latitude,
@@ -90,6 +96,7 @@ class LocationService {
           bearing: pos.heading,
           accuracy: pos.accuracy,
           source: 'gps',
+          batteryLevel: batt,
         );
         _lastUploaded = pos;
       } catch (e, st) {
