@@ -95,7 +95,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = isLogin ? await login(p, password) : await register(p, password);
-      setAuth(res.access_token, res.user_id, p);
+      setAuth(res.access_token, res.refresh_token, res.user_id, p);
       navigate('/');
     } catch (e) {
       setError(axiosErrorMessage(e));

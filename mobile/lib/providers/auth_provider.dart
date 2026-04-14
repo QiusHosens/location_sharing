@@ -57,6 +57,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
+  /// 刷新 token 成功后由 [ApiClient] 调用，同步内存状态。
+  Future<void> applyRefreshedTokens(String accessToken, String refreshToken) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('token', accessToken);
+    await prefs.setString('refresh_token', refreshToken);
+    state = state.copyWith(token: accessToken);
+  }
+
   /// 成功返回 `null`，失败返回可读错误文案（账号密码等保留在输入框，由界面展示错误）。
   Future<String?> login(String phone, String password) async {
     state = state.copyWith(isLoading: true);

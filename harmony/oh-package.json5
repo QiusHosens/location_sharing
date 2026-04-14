@@ -1,6 +1,11 @@
 {
+  "name": "locationsharing",
+  "version": "1.0.0",
   "modelVersion": "5.0.0",
   "description": "定位共享 HarmonyOS 端",
+  "main": "",
+  "author": "",
+  "license": "Apache-2.0",
   "dependencies": {},
   "devDependencies": {
     "@ohos/hypium": "1.0.16"

@@ -1,5 +1,6 @@
 import { geoLocationManager } from '@kit.LocationKit';
 import { HttpClient } from '../api/HttpClient';
+import { LocationUploadBody } from '../api/ApiPayloads';
 
 export class LocationService {
   private requestId: number = -1;
@@ -40,10 +41,9 @@ export class LocationService {
   }
 
   async uploadLocation(longitude: number, latitude: number, altitude?: number): Promise<void> {
-    await HttpClient.post('/location/upload', {
-      longitude, latitude,
-      altitude: altitude ?? undefined,
-      source: 'harmony',
-    });
+    const body: LocationUploadBody = altitude !== undefined
+      ? { longitude: longitude, latitude: latitude, altitude: altitude, source: 'harmony' }
+      : { longitude: longitude, latitude: latitude, source: 'harmony' };
+    await HttpClient.post('/location/upload', body);
   }
 }

@@ -60,7 +60,9 @@ struct MapPage {
     Column() {
       Row() {
         Text('定位共享').fontSize(20).fontWeight(FontWeight.Bold).layoutWeight(1)
-        Button({ type: ButtonType.Circle }) { Image($r('sys.media.ohos_ic_public_refresh')).width(20).height(20) }
+        Button({ type: ButtonType.Circle }) {
+          Text('↻').fontSize(18)
+        }
           .width(36).height(36)
           .onClick(() => this.loadLocations())
       }.width('100%').padding(16)
@@ -68,7 +70,7 @@ struct MapPage {
       // 地图占位区域
       Stack() {
         Column() {
-          Image($r('sys.media.ohos_ic_public_location')).width(48).height(48).fillColor('#2196F3')
+          Text('⌖').fontSize(40).fontColor('#2196F3')
           Text('高德地图区域').fontSize(14).fontColor('#999').margin({ top: 8 })
           Text(this.amapAndroidKey ? '已从后台加载高德 Key，可接入鸿蒙 SDK' : '请在管理后台配置 amap_android_key').fontSize(12).fontColor('#ccc')
           if (this.myLng !== 0) {

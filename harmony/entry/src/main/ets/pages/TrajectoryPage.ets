@@ -1,11 +1,18 @@
 import { router } from '@kit.ArkUI';
 import { HttpClient } from '../api/HttpClient';
 import { preferences } from '@kit.ArkData';
+import { appendTrajectoryQuery, TrajectoryQueryParams } from '../api/ApiPayloads';
 
 interface TrajectoryPoint {
   longitude: number;
   latitude: number;
   recorded_at: string;
+}
+
+/** 与后端 /trajectory 返回 data 结构一致 */
+interface TrajectoryDayData {
+  points?: TrajectoryPoint[];
+  total?: number;
 }
 
 @Entry
@@ -23,12 +30,16 @@ struct TrajectoryPage {
       const now = new Date();
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
-      const res = await HttpClient.get('/trajectory', {
-        user_id: userId, start_time: start, end_time: end,
-      }) as Record<string, object>;
-      const data = res['data'] as Record<string, object>;
-      this.points = (data['points'] as TrajectoryPoint[]) ?? [];
-      this.total = (data['total'] as number) ?? 0;
+      const query: TrajectoryQueryParams = {
+        user_id: userId,
+        start_time: start,
+        end_time: end,
+      };
+      const pathWithQuery = appendTrajectoryQuery('/trajectory', query);
+      const res = await HttpClient.get(pathWithQuery) as Record<string, object>;
+      const data = res['data'] as TrajectoryDayData;
+      this.points = data.points ?? [];
+      this.total = data.total ?? 0;
     } catch (e) {}
     this.loading = false;
   }

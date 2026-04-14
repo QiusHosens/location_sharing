@@ -1,5 +1,6 @@
 import { router } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
+import { HttpClient } from '../api/HttpClient';
 
 @Entry
 @Component
@@ -10,8 +11,10 @@ struct Index {
 
   async checkAuth(): Promise<void> {
     try {
+      HttpClient.setContext(getContext(this));
       const store = await preferences.getPreferences(getContext(this), 'auth');
       const token = await store.get('token', '') as string;
+      await HttpClient.loadTokensFromPrefs();
       if (token) {
         router.replaceUrl({ url: 'pages/MapPage' });
       } else {

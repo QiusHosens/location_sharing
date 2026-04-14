@@ -2,6 +2,10 @@
   "string": [
     { "name": "module_desc", "value": "定位共享" },
     { "name": "EntryAbility_desc", "value": "定位共享主界面" },
-    { "name": "EntryAbility_label", "value": "定位共享" }
+    { "name": "EntryAbility_label", "value": "定位共享" },
+    { "name": "permission_location_bg_reason", "value": "用于后台持续上报位置" },
+    { "name": "permission_internet_reason", "value": "用于连接服务器同步位置与家人信息" },
+    { "name": "permission_location_reason", "value": "用于在地图上显示您的实时位置" },
+    { "name": "permission_approx_location_reason", "value": "用于获取大致位置信息" }
   ]
 }

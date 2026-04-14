@@ -49,11 +49,16 @@ class _LocationSharingAppState extends ConsumerState<LocationSharingApp> {
   void initState() {
     super.initState();
     ApiClient.setUnauthorizedHandler(() => ref.read(authProvider.notifier).logout());
+    ApiClient.setOnTokensRefreshed(
+      (access, refresh) =>
+          ref.read(authProvider.notifier).applyRefreshedTokens(access, refresh),
+    );
   }
 
   @override
   void dispose() {
     ApiClient.setUnauthorizedHandler(null);
+    ApiClient.setOnTokensRefreshed(null);
     super.dispose();
   }
 

@@ -1,6 +1,7 @@
 import { router } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
 import { HttpClient } from '../api/HttpClient';
+import { ProfileUpdateBody } from '../api/ApiPayloads';
 
 @Entry
 @Component
@@ -22,7 +23,8 @@ struct SettingsPage {
 
   async saveProfile(): Promise<void> {
     try {
-      await HttpClient.put('/users/profile', { nickname: this.nickname });
+      const body: ProfileUpdateBody = { nickname: this.nickname };
+      await HttpClient.put('/users/profile', body);
     } catch (e) {}
   }
 
@@ -30,7 +32,7 @@ struct SettingsPage {
     const store = await preferences.getPreferences(getContext(this), 'auth');
     await store.clear();
     await store.flush();
-    HttpClient.clearToken();
+    HttpClient.clearSession();
     router.replaceUrl({ url: 'pages/LoginPage' });
   }
 

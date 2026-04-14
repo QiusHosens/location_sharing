@@ -12,9 +12,9 @@
       {
         "name": "EntryAbility",
         "srcEntry": "./ets/entryability/EntryAbility.ets",
-        "description": "定位共享",
+        "description": "$string:module_desc",
         "icon": "$media:app_icon",
-        "label": "定位共享",
+        "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:app_icon",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
@@ -27,11 +27,24 @@
       }
     ],
     "requestPermissions": [
-      { "name": "ohos.permission.INTERNET" },
-      { "name": "ohos.permission.LOCATION" },
-      { "name": "ohos.permission.APPROXIMATELY_LOCATION" },
-      { "name": "ohos.permission.LOCATION_IN_BACKGROUND",
-        "reason": "用于后台持续上报位置",
+      {
+        "name": "ohos.permission.INTERNET",
+        "reason": "$string:permission_internet_reason",
+        "usedScene": { "abilities": ["EntryAbility"], "when": "inuse" }
+      },
+      {
+        "name": "ohos.permission.LOCATION",
+        "reason": "$string:permission_location_reason",
+        "usedScene": { "abilities": ["EntryAbility"], "when": "inuse" }
+      },
+      {
+        "name": "ohos.permission.APPROXIMATELY_LOCATION",
+        "reason": "$string:permission_approx_location_reason",
+        "usedScene": { "abilities": ["EntryAbility"], "when": "inuse" }
+      },
+      {
+        "name": "ohos.permission.LOCATION_IN_BACKGROUND",
+        "reason": "$string:permission_location_bg_reason",
         "usedScene": { "abilities": ["EntryAbility"], "when": "always" }
       }
     ]

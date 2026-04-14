@@ -1,5 +1,6 @@
 import { router } from '@kit.ArkUI';
 import { HttpClient } from '../api/HttpClient';
+import { appendNotificationListQuery, NotificationListParams } from '../api/ApiPayloads';
 
 interface NotificationItem {
   id: string;
@@ -8,6 +9,11 @@ interface NotificationItem {
   body: string | null;
   is_read: boolean;
   created_at: string;
+}
+
+interface NotificationsListData {
+  items?: NotificationItem[];
+  unread_count?: number;
 }
 
 @Entry
@@ -20,10 +26,12 @@ struct NotificationsPage {
 
   async load(): Promise<void> {
     try {
-      const res = await HttpClient.get('/notifications', { page: '1', page_size: '20' }) as Record<string, object>;
-      const data = res['data'] as Record<string, object>;
-      this.notifications = (data['items'] as NotificationItem[]) ?? [];
-      this.unreadCount = (data['unread_count'] as number) ?? 0;
+      const query: NotificationListParams = { page: '1', page_size: '20' };
+      const pathWithQuery = appendNotificationListQuery('/notifications', query);
+      const res = await HttpClient.get(pathWithQuery) as Record<string, object>;
+      const data = res['data'] as NotificationsListData;
+      this.notifications = data.items ?? [];
+      this.unreadCount = data.unread_count ?? 0;
     } catch (e) {}
   }
 

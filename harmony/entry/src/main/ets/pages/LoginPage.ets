@@ -1,6 +1,7 @@
 import { router } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
 import { HttpClient } from '../api/HttpClient';
+import { AuthPasswordBody } from '../api/ApiPayloads';
 
 @Entry
 @Component
@@ -18,14 +19,17 @@ struct LoginPage {
     this.error = '';
     const path = this.tab === 0 ? '/auth/login' : '/auth/register';
     try {
-      const res = await HttpClient.post(path, { phone: this.phone, password: this.password }) as Record<string, object>;
+      const body: AuthPasswordBody = { phone: this.phone, password: this.password };
+      const res = await HttpClient.post(path, body) as Record<string, object>;
       const data = res['data'] as Record<string, string>;
       const store = await preferences.getPreferences(getContext(this), 'auth');
       await store.put('token', data['access_token']);
+      await store.put('refresh_token', data['refresh_token']);
       await store.put('user_id', data['user_id']);
       await store.put('phone', this.phone);
       await store.flush();
-      HttpClient.setToken(data['access_token']);
+      HttpClient.setContext(getContext(this));
+      HttpClient.setSession(data['access_token'], data['refresh_token']);
       router.replaceUrl({ url: 'pages/MapPage' });
     } catch (e) {
       this.error = this.tab === 0 ? '登录失败' : '注册失败';

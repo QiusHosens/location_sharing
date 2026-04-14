@@ -1,5 +1,6 @@
 import { router } from '@kit.ArkUI';
 import { HttpClient } from '../api/HttpClient';
+import { GroupCreateBody } from '../api/ApiPayloads';
 
 interface GroupMember {
   user_id: string;
@@ -33,7 +34,8 @@ struct FamilyPage {
 
   async createGroup(): Promise<void> {
     try {
-      await HttpClient.post('/groups', { name: this.newGroupName });
+      const body: GroupCreateBody = { name: this.newGroupName };
+      await HttpClient.post('/groups', body);
       this.showCreateDialog = false;
       this.newGroupName = '';
       await this.loadGroups();

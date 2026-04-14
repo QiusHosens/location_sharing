@@ -1,5 +1,6 @@
 import { router } from '@kit.ArkUI';
 import { HttpClient } from '../api/HttpClient';
+import { SharingRespondBody } from '../api/ApiPayloads';
 
 interface SharingItem {
   id: string;
@@ -26,7 +27,11 @@ struct SharingPage {
   }
 
   async respond(id: string, accept: boolean): Promise<void> {
-    try { await HttpClient.put('/sharing/' + id + '/respond', { accept }); await this.load(); } catch (e) {}
+    try {
+      const body: SharingRespondBody = { accept: accept };
+      await HttpClient.put('/sharing/' + id + '/respond', body);
+      await this.load();
+    } catch (e) {}
   }
 
   async deleteSh(id: string): Promise<void> {
