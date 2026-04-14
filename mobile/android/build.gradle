@@ -47,6 +47,14 @@ subprojects { subproject ->
             }
         }
     }
+    // 高德 amap_flutter_* 等插件仍写 compileSdk 29，依赖资源引用 android:attr/lStar（API 31+）会导致 verifyReleaseResources 失败
+    subproject.afterEvaluate {
+        if (subproject.plugins.hasPlugin("com.android.library")) {
+            subproject.android {
+                compileSdk 35
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")
