@@ -18,8 +18,7 @@ class _ApiLogInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final hasAuth = options.headers.containsKey('Authorization');
-    final buf = StringBuffer()
-      ..write('→ ${options.method} ${options.uri}');
+    final buf = StringBuffer()..write('→ ${options.method} ${options.uri}');
     if (options.queryParameters.isNotEmpty) {
       buf.write('\n  query: ${options.queryParameters}');
     }
@@ -52,15 +51,24 @@ class _ApiLogInterceptor extends Interceptor {
   }
 }
 
+typedef UnauthorizedHandler = Future<void> Function();
+
 class ApiClient {
   static final ApiClient _instance = ApiClient._();
   factory ApiClient() => _instance;
+
+  static UnauthorizedHandler? _onUnauthorized;
+
+  /// 在带 [ProviderScope] 的根组件中注册；dispose 时传 `null` 解除。
+  static void setUnauthorizedHandler(UnauthorizedHandler? handler) {
+    _onUnauthorized = handler;
+  }
 
   late final Dio dio;
 
   ApiClient._() {
     dio = Dio(BaseOptions(
-      baseUrl: 'http://www.synerunify.com:40808/api/v1',
+      baseUrl: 'http://192.168.0.39:8080/api/v1',
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       headers: {'Content-Type': 'application/json'},
@@ -75,8 +83,15 @@ class ApiClient {
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.clear();
+          final p = error.requestOptions.path;
+          // 登录/注册失败返回 401 时不应清空会话
+          if (p.contains('/auth/login') || p.contains('/auth/register')) {
+            handler.next(error);
+            return;
+          }
+          try {
+            await _onUnauthorized?.call();
+          } catch (_) {}
         }
         handler.next(error);
       },
@@ -86,7 +101,8 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> get(String path, {Map<String, dynamic>? params}) async {
+  Future<Map<String, dynamic>> get(String path,
+      {Map<String, dynamic>? params}) async {
     final res = await dio.get(path, queryParameters: params);
     return res.data;
   }

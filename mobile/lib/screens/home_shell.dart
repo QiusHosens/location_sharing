@@ -5,20 +5,22 @@ class HomeShell extends StatelessWidget {
   final Widget child;
   const HomeShell({super.key, required this.child});
 
+  static const _minePaths = {
+    '/me',
+    '/trajectory',
+    '/family',
+    '/sharing',
+    '/settings',
+  };
+
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     int currentIndex = 0;
-    if (location == '/family') {
+    if (location == '/notifications') {
       currentIndex = 1;
-    } else if (location == '/sharing') {
+    } else if (_minePaths.contains(location)) {
       currentIndex = 2;
-    } else if (location == '/trajectory') {
-      currentIndex = 3;
-    } else if (location == '/notifications') {
-      currentIndex = 4;
-    } else if (location == '/settings') {
-      currentIndex = 5;
     }
 
     return Scaffold(
@@ -26,16 +28,13 @@ class HomeShell extends StatelessWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: currentIndex,
         onDestinationSelected: (i) {
-          final paths = ['/', '/family', '/sharing', '/trajectory', '/notifications', '/settings'];
+          final paths = ['/', '/notifications', '/me'];
           context.go(paths[i]);
         },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.map), label: '地图'),
-          NavigationDestination(icon: Icon(Icons.group), label: '家庭'),
-          NavigationDestination(icon: Icon(Icons.share_location), label: '共享'),
-          NavigationDestination(icon: Icon(Icons.timeline), label: '轨迹'),
           NavigationDestination(icon: Icon(Icons.notifications), label: '通知'),
-          NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
+          NavigationDestination(icon: Icon(Icons.person), label: '我的'),
         ],
       ),
     );

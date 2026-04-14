@@ -31,7 +31,7 @@ class _SharingScreenState extends State<SharingScreen> {
             return Card(margin: const EdgeInsets.only(bottom: 8), child: ListTile(
               leading: CircleAvatar(child: Text((s['peer_nickname'] ?? s['peer_phone'] ?? '?')[0])),
               title: Text(s['peer_nickname'] ?? s['peer_phone'] ?? ''),
-              subtitle: Chip(label: Text(statusText), backgroundColor: statusColor.withValues(alpha: 0.1),
+              subtitle: Chip(label: Text(statusText), backgroundColor: statusColor.withOpacity(0.1),
                 labelStyle: TextStyle(color: statusColor), visualDensity: VisualDensity.compact),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (s['status'] == 'pending')
@@ -54,7 +54,14 @@ class _SharingScreenState extends State<SharingScreen> {
     final ctrl = TextEditingController();
     showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text('请求位置共享'),
-      content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: '对方用户ID')),
+      content: TextField(
+        controller: ctrl,
+        keyboardType: TextInputType.phone,
+        decoration: const InputDecoration(
+          labelText: '对方手机号',
+          hintText: '对方账号已注册的手机号',
+        ),
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
         FilledButton(onPressed: () async {

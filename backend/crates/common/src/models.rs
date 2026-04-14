@@ -43,6 +43,17 @@ pub struct FamilyMember {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct FamilyInvitation {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub inviter_id: Uuid,
+    pub invitee_id: Uuid,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct SharingPermission {
     pub id: Uuid,
     pub owner_id: Uuid,

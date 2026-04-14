@@ -28,6 +28,15 @@ export async function addMember(groupId: string, phone: string) {
   await api.post(`/groups/${groupId}/members`, { phone });
 }
 
+export async function getFamilyInvitations() {
+  const { data } = await api.get('/groups/invitations');
+  return data.data as any[];
+}
+
+export async function respondFamilyInvitation(invitationId: string, accept: boolean) {
+  await api.put(`/groups/invitations/${invitationId}`, { accept });
+}
+
 export async function removeMember(groupId: string, memberId: string) {
   await api.delete(`/groups/${groupId}/members/${memberId}`);
 }
@@ -37,8 +46,8 @@ export async function getSharing() {
   return data.data;
 }
 
-export async function requestSharing(targetUserId: string) {
-  const { data } = await api.post('/sharing', { target_user_id: targetUserId });
+export async function requestSharing(phone: string) {
+  const { data } = await api.post('/sharing', { phone: phone.trim() });
   return data.data;
 }
 

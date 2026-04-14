@@ -7,8 +7,10 @@ plugins {
 
 android {
     namespace = "com.ls.location_sharing"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // 至少 35：flutter_plugin_android_lifecycle 等插件要求；不低于 Flutter 模板默认值
+    compileSdk = Math.max(flutter.compileSdkVersion as int, 35)
+    // 与当前 AGP / 多数插件声明的 NDK 对齐（高于 Flutter 默认 23.x）
+    ndkVersion = "25.1.8937393"
 
     compileOptions {
         coreLibraryDesugaringEnabled true
@@ -26,7 +28,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = Math.max(flutter.targetSdkVersion as int, 35)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
@@ -54,4 +56,7 @@ flutter {
 dependencies {
     // 与 AGP 8.3 配套的 desugar 版本；flutter_local_notifications 等依赖需开启 desugaring
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
+    // 高德 Flutter 插件将原生 SDK 标为 compileOnly，必须在 app 侧 implementation 才会打进 APK（否则 NoClassDefFoundError: AMapOptions）
+    implementation "com.amap.api:3dmap:8.1.0"
+    implementation "com.amap.api:location:5.6.0"
 }

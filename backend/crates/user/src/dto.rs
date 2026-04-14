@@ -1,4 +1,4 @@
-use chrono::NaiveTime;
+use chrono::{DateTime, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -22,8 +22,25 @@ pub struct InviteMemberReq {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct RespondFamilyInviteReq {
+    pub accept: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FamilyInvitationInfo {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub group_name: String,
+    pub inviter_id: Uuid,
+    pub inviter_phone: String,
+    pub inviter_nickname: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct RequestSharingReq {
-    pub target_user_id: Uuid,
+    /// 对方已注册手机号（与邀请入群一致）
+    pub phone: String,
 }
 
 #[derive(Debug, Deserialize)]

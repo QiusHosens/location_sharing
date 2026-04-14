@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../api/location_api.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'trajectory_detail_screen.dart';
 
 class TrajectoryScreen extends StatefulWidget {
   const TrajectoryScreen({super.key});
@@ -9,107 +10,128 @@ class TrajectoryScreen extends StatefulWidget {
 
 class _TrajectoryScreenState extends State<TrajectoryScreen> {
   final LocationApi _api = LocationApi();
-  DateTime _startDate = DateTime.now();
-  DateTime _endDate = DateTime.now();
-  List<dynamic> _points = [];
-  int _total = 0;
+  DateTime _selected = DateTime.now();
+  Map<String, dynamic>? _summary;
   bool _loading = false;
 
-  Future<void> _query() async {
+  Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('user_id') ?? '';
-      final res = await _api.getTrajectory(userId,
-        DateTime(_startDate.year, _startDate.month, _startDate.day).toUtc().toIso8601String(),
-        DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59).toUtc().toIso8601String());
-      setState(() { _points = res['points'] ?? []; _total = res['total'] ?? 0; });
-    } catch (e) {
+      final dateStr = _dateStr(_selected);
+      final res = await _api.getTrajectoryDaySummary(dateStr);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('查询失败')));
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      setState(() {
+        _summary = res;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _summary = null;
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('加载失败')));
     }
   }
 
-  Future<void> _pickDate(bool isStart) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isStart ? _startDate : _endDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now(),
-    );
-    if (picked == null) return;
-    setState(() {
-      if (isStart) {
-        _startDate = picked;
-      } else {
-        _endDate = picked;
-      }
-    });
+  String _dateStr(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  String _fmtHm(String? iso) {
+    if (iso == null) return '';
+    final t = DateTime.tryParse(iso);
+    if (t == null) return iso;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(t.hour)}:${two(t.minute)}';
   }
 
-  String _formatDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final users = (_summary?['users'] as List?) ?? [];
+
     return Scaffold(
       appBar: AppBar(title: const Text('历史轨迹')),
-      body: Column(children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(_formatDate(_startDate)),
-                onPressed: () => _pickDate(true),
-              ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Card(
+            margin: const EdgeInsets.all(12),
+            child: CalendarDatePicker(
+              key: ValueKey(_dateStr(_selected)),
+              initialDate: _selected,
+              firstDate: DateTime.now().subtract(const Duration(days: 365)),
+              lastDate: DateTime.now(),
+              onDateChanged: (d) {
+                setState(() => _selected = d);
+                _load();
+              },
             ),
-            const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('至')),
-            Expanded(
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(_formatDate(_endDate)),
-                onPressed: () => _pickDate(false),
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: _loading ? null : _query,
-              child: _loading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text('查询'),
-            ),
-          ]),
-        ),
-        if (_total > 0)
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text('共 $_total 个轨迹点', style: Theme.of(context).textTheme.bodySmall),
+            child: Text(
+              '选中日期：${_dateStr(_selected)}（UTC 日） · 每 2 小时一段',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
-        Expanded(child: _points.isEmpty
-          ? const Center(child: Text('暂无轨迹数据', style: TextStyle(color: Colors.grey)))
-          : ListView.builder(itemCount: _points.length, itemBuilder: (ctx, i) {
-              final p = _points[i];
-              return ListTile(
-                dense: true,
-                leading: CircleAvatar(
-                  radius: 14,
-                  child: Text('${i + 1}', style: const TextStyle(fontSize: 10)),
-                ),
-                title: Text(
-                  '经度: ${p['longitude']}  纬度: ${p['latitude']}',
-                ),
-                subtitle: Text('${p['recorded_at'] ?? ''}'),
-              );
-            })),
-      ]),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : users.isEmpty
+                    ? const Center(child: Text('该日暂无轨迹', style: TextStyle(color: Colors.grey)))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: users.length,
+                        itemBuilder: (ctx, i) {
+                          final u = users[i] as Map<String, dynamic>;
+                          final phone = u['phone']?.toString() ?? '';
+                          final nick = u['nickname']?.toString();
+                          final segList = (u['segments'] as List?) ?? [];
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: ExpansionTile(
+                              title: Text(nick != null && nick.isNotEmpty ? '$phone · $nick' : phone),
+                              subtitle: Text('${segList.length} 段轨迹'),
+                              children: segList.map<Widget>((seg) {
+                                final s = seg as Map<String, dynamic>;
+                                final start = s['start_time']?.toString();
+                                final end = s['end_time']?.toString();
+                                final cnt = s['point_count'];
+                                final label =
+                                    '${_fmtHm(start)}–${_fmtHm(end)} · $cnt 点';
+                                return ListTile(
+                                  title: Text(label),
+                                  subtitle: const Text('开始–结束为本地时间显示'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => TrajectoryDetailScreen(
+                                          userId: u['user_id'].toString(),
+                                          startIso: start ?? '',
+                                          endIso: end ?? '',
+                                          title: '$phone $label',
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }

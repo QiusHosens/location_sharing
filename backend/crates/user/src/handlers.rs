@@ -66,14 +66,36 @@ pub async fn delete_group(
     Ok(ApiResponse::message("Group deleted"))
 }
 
-pub async fn add_member(
+pub async fn invite_member(
     AuthUser(user_id): AuthUser,
     State(db): State<sqlx::PgPool>,
     Path(group_id): Path<Uuid>,
     Json(req): Json<InviteMemberReq>,
 ) -> Result<ApiResponse<()>, AppError> {
-    UserService::add_member(&db, user_id, group_id, &req.phone).await?;
-    Ok(ApiResponse::message("Member added"))
+    UserService::invite_member(&db, user_id, group_id, &req.phone).await?;
+    Ok(ApiResponse::message("Invitation sent"))
+}
+
+pub async fn list_family_invitations(
+    AuthUser(user_id): AuthUser,
+    State(db): State<sqlx::PgPool>,
+) -> Result<Json<ApiResponse<Vec<FamilyInvitationInfo>>>, AppError> {
+    let items = UserService::list_pending_family_invitations(&db, user_id).await?;
+    Ok(Json(ApiResponse::ok(items)))
+}
+
+pub async fn respond_family_invitation(
+    AuthUser(user_id): AuthUser,
+    State(db): State<sqlx::PgPool>,
+    Path(invitation_id): Path<Uuid>,
+    Json(req): Json<RespondFamilyInviteReq>,
+) -> Result<ApiResponse<()>, AppError> {
+    UserService::respond_family_invitation(&db, user_id, invitation_id, req.accept).await?;
+    Ok(ApiResponse::message(if req.accept {
+        "Joined group"
+    } else {
+        "Invitation declined"
+    }))
 }
 
 pub async fn remove_member(
@@ -90,7 +112,12 @@ pub async fn request_sharing(
     State(db): State<sqlx::PgPool>,
     Json(req): Json<RequestSharingReq>,
 ) -> Result<Json<ApiResponse<common::models::SharingPermission>>, AppError> {
-    let perm = UserService::request_sharing(&db, user_id, req.target_user_id).await?;
+    let phone = req.phone.trim();
+    if phone.is_empty() {
+        return Err(AppError::BadRequest("phone is required".into()));
+    }
+    let viewer_id = UserService::get_user_by_phone(&db, phone).await?.id;
+    let perm = UserService::request_sharing(&db, user_id, viewer_id).await?;
     Ok(Json(ApiResponse::ok(perm)))
 }
 

@@ -10,7 +10,8 @@ class MqttService {
   Function(Map<String, dynamic>)? onLocationUpdate;
   Function(Map<String, dynamic>)? onNotification;
 
-  Future<void> connect(String userId, {String host = 'www.synerunify.com', int port = 41883}) async {
+  Future<void> connect(String userId,
+      {String host = '192.168.0.95', int port = 41883}) async {
     final clientId = 'flutter_${userId.hashCode & 0x7fffffff}';
     _client = MqttServerClient(host, clientId);
     _client!.port = port;
@@ -30,7 +31,8 @@ class MqttService {
           );
           try {
             final data = jsonDecode(payload);
-            if (msg.topic.contains('location/') && msg.topic.contains('/update')) {
+            if (msg.topic.contains('location/') &&
+                msg.topic.contains('/update')) {
               onLocationUpdate?.call(data);
             } else if (msg.topic.contains('notification/')) {
               onNotification?.call(data);

@@ -1,9 +1,11 @@
-use chrono::NaiveTime;
+use chrono::{DateTime, NaiveTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use common::error::AppError;
-use common::models::{FamilyGroup, FamilyMember, SharingPermission, User};
+use common::models::{FamilyGroup, FamilyInvitation, FamilyMember, SharingPermission, User};
+use notification::dto::CreateNotificationReq;
+use notification::NotificationService;
 use std::collections::HashMap;
 
 use crate::dto::*;
@@ -108,7 +110,16 @@ impl UserService {
         Ok(())
     }
 
-    pub async fn add_member(db: &PgPool, user_id: Uuid, group_id: Uuid, phone: &str) -> Result<(), AppError> {
+    pub async fn get_user_by_phone(db: &PgPool, phone: &str) -> Result<User, AppError> {
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE phone = $1")
+            .bind(phone.trim())
+            .fetch_optional(db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("User not found with this phone".into()))
+    }
+
+    /// 向手机号对应用户发送家庭组邀请（需对方在通知中心同意后才加入）
+    pub async fn invite_member(db: &PgPool, user_id: Uuid, group_id: Uuid, phone: &str) -> Result<(), AppError> {
         let member = sqlx::query_as::<_, FamilyMember>(
             "SELECT * FROM family_members WHERE group_id = $1 AND user_id = $2"
         )
@@ -121,20 +132,163 @@ impl UserService {
             return Err(AppError::Forbidden);
         }
 
-        let target = sqlx::query_as::<_, User>("SELECT * FROM users WHERE phone = $1")
-            .bind(phone)
+        let group = sqlx::query_as::<_, FamilyGroup>("SELECT * FROM family_groups WHERE id = $1")
+            .bind(group_id)
             .fetch_optional(db)
             .await?
-            .ok_or_else(|| AppError::NotFound("User not found with this phone".into()))?;
+            .ok_or_else(|| AppError::NotFound("Group not found".into()))?;
 
-        sqlx::query(
-            "INSERT INTO family_members (group_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING"
+        let target = Self::get_user_by_phone(db, phone).await?;
+
+        if target.id == user_id {
+            return Err(AppError::BadRequest("Cannot invite yourself".into()));
+        }
+
+        let already: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT user_id FROM family_members WHERE group_id = $1 AND user_id = $2",
         )
         .bind(group_id)
         .bind(target.id)
-        .execute(db)
+        .fetch_optional(db)
         .await?;
 
+        if already.is_some() {
+            return Err(AppError::Conflict("User already in this group".into()));
+        }
+
+        let pending: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT id FROM family_invitations WHERE group_id = $1 AND invitee_id = $2 AND status = 'pending'",
+        )
+        .bind(group_id)
+        .bind(target.id)
+        .fetch_optional(db)
+        .await?;
+
+        if pending.is_some() {
+            return Err(AppError::Conflict("Invitation already pending for this user".into()));
+        }
+
+        let inv = sqlx::query_as::<_, FamilyInvitation>(
+            "INSERT INTO family_invitations (group_id, inviter_id, invitee_id, status) VALUES ($1, $2, $3, 'pending') RETURNING *",
+        )
+        .bind(group_id)
+        .bind(user_id)
+        .bind(target.id)
+        .fetch_one(db)
+        .await
+        .map_err(|e| {
+            if let sqlx::Error::Database(ref d) = e {
+                if d.code().as_deref() == Some("23505") {
+                    return AppError::Conflict("Invitation already pending for this user".into());
+                }
+            }
+            e.into()
+        })?;
+
+        let inviter = Self::get_profile(db, user_id).await?;
+        let inviter_label = inviter
+            .nickname
+            .clone()
+            .unwrap_or_else(|| inviter.phone.clone());
+
+        let title = "家庭组邀请".to_string();
+        let body = format!(
+            "{} 邀请你加入家庭组「{}」",
+            inviter_label, group.name
+        );
+        let data = serde_json::json!({
+            "invitation_id": inv.id,
+            "group_id": group.id,
+            "group_name": group.name,
+            "type": "family_invite",
+        });
+
+        NotificationService::create(
+            db,
+            &CreateNotificationReq {
+                user_id: target.id,
+                r#type: "family_invite".to_string(),
+                title: Some(title),
+                body: Some(body),
+                data: Some(data),
+            },
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn list_pending_family_invitations(
+        db: &PgPool,
+        invitee_id: Uuid,
+    ) -> Result<Vec<FamilyInvitationInfo>, AppError> {
+        let rows = sqlx::query_as::<_, (Uuid, Uuid, String, Uuid, String, Option<String>, DateTime<Utc>)>(
+            "SELECT fi.id, fi.group_id, fg.name, fi.inviter_id, u.phone, u.nickname, fi.created_at
+             FROM family_invitations fi
+             INNER JOIN family_groups fg ON fg.id = fi.group_id
+             INNER JOIN users u ON u.id = fi.inviter_id
+             WHERE fi.invitee_id = $1 AND fi.status = 'pending'
+             ORDER BY fi.created_at DESC",
+        )
+        .bind(invitee_id)
+        .fetch_all(db)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(
+                |(id, group_id, group_name, inviter_id, inviter_phone, inviter_nickname, created_at)| {
+                    FamilyInvitationInfo {
+                        id,
+                        group_id,
+                        group_name,
+                        inviter_id,
+                        inviter_phone,
+                        inviter_nickname,
+                        created_at,
+                    }
+                },
+            )
+            .collect())
+    }
+
+    pub async fn respond_family_invitation(
+        db: &PgPool,
+        user_id: Uuid,
+        invitation_id: Uuid,
+        accept: bool,
+    ) -> Result<(), AppError> {
+        let inv = sqlx::query_as::<_, FamilyInvitation>(
+            "SELECT * FROM family_invitations WHERE id = $1 AND invitee_id = $2 AND status = 'pending'",
+        )
+        .bind(invitation_id)
+        .bind(user_id)
+        .fetch_optional(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Invitation not found".into()))?;
+
+        let mut tx = db.begin().await?;
+
+        if accept {
+            sqlx::query(
+                "INSERT INTO family_members (group_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING",
+            )
+            .bind(inv.group_id)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        let status = if accept { "accepted" } else { "rejected" };
+        sqlx::query(
+            "UPDATE family_invitations SET status = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(status)
+        .bind(invitation_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(())
     }
 

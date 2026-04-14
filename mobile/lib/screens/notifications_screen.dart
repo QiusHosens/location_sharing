@@ -36,7 +36,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             itemBuilder: (ctx, i) {
               final n = _notifications[i];
               return ListTile(
-                tileColor: n['is_read'] == true ? null : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                tileColor: n['is_read'] == true ? null : Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
                 title: Text(n['title'] ?? n['type'] ?? '', style: TextStyle(fontWeight: n['is_read'] == true ? FontWeight.normal : FontWeight.bold)),
                 subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   if (n['body'] != null) Text(n['body']),

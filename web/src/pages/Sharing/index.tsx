@@ -90,7 +90,7 @@ export default function SharingPage() {
 
       <Dialog open={reqOpen} onClose={() => setReqOpen(false)}>
         <DialogTitle>请求位置共享</DialogTitle>
-        <DialogContent><TextField label="对方用户ID" fullWidth value={targetId} onChange={(e) => setTargetId(e.target.value)} sx={{ mt: 1 }} helperText="输入想要查看其位置的用户ID" /></DialogContent>
+        <DialogContent><TextField label="对方手机号" fullWidth value={targetId} onChange={(e) => setTargetId(e.target.value)} sx={{ mt: 1 }} helperText="对方账号已注册的手机号" /></DialogContent>
         <DialogActions><Button onClick={() => setReqOpen(false)}>取消</Button><Button variant="contained" onClick={handleRequest}>发送请求</Button></DialogActions>
       </Dialog>
 

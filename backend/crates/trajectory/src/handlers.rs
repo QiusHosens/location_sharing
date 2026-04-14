@@ -18,3 +18,15 @@ pub async fn query_trajectory(
     let result = TrajectoryService::query(&db, user_id, q.user_id, q.start_time, q.end_time).await?;
     Ok(Json(ApiResponse::ok(result)))
 }
+
+pub async fn query_day_summary(
+    AuthUser(user_id): AuthUser,
+    State(db): State<sqlx::PgPool>,
+    Query(q): Query<DaySummaryQuery>,
+) -> Result<Json<ApiResponse<DayTrajectorySummaryResponse>>, AppError> {
+    if q.date.trim().is_empty() {
+        return Err(AppError::BadRequest("date is required".into()));
+    }
+    let result = TrajectoryService::query_day_summary(&db, user_id, &q.date).await?;
+    Ok(Json(ApiResponse::ok(result)))
+}

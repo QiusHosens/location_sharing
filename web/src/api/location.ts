@@ -20,6 +20,20 @@ export async function getTrajectory(userId: string, startTime: string, endTime: 
   return data.data;
 }
 
+/** 指定日期的轨迹分段汇总（UTC 日、每 2 小时一段），date: YYYY-MM-DD */
+export async function getTrajectoryDaySummary(date: string) {
+  const { data } = await api.get('/trajectory/day-summary', { params: { date } });
+  return data.data as {
+    date: string;
+    users: Array<{
+      user_id: string;
+      phone: string;
+      nickname?: string;
+      segments: Array<{ start_time: string; end_time: string; point_count: number }>;
+    }>;
+  };
+}
+
 export async function getNotifications(params?: { page?: number; page_size?: number; unread_only?: boolean }) {
   const { data } = await api.get('/notifications', { params });
   return data.data;

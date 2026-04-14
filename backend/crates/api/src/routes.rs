@@ -30,9 +30,20 @@ fn user_routes() -> Router<AppState> {
 fn group_routes() -> Router<AppState> {
     Router::new()
         .route("/", post(user::handlers::create_group).get(user::handlers::list_groups))
+        .route(
+            "/invitations",
+            get(user::handlers::list_family_invitations),
+        )
+        .route(
+            "/invitations/{invitation_id}",
+            put(user::handlers::respond_family_invitation),
+        )
         .route("/{id}", delete(user::handlers::delete_group))
-        .route("/{id}/members", post(user::handlers::add_member))
-        .route("/{id}/members/{member_id}", delete(user::handlers::remove_member))
+        .route("/{id}/members", post(user::handlers::invite_member))
+        .route(
+            "/{id}/members/{member_id}",
+            delete(user::handlers::remove_member),
+        )
 }
 
 fn sharing_routes() -> Router<AppState> {
@@ -52,6 +63,7 @@ fn location_routes() -> Router<AppState> {
 
 fn trajectory_routes() -> Router<AppState> {
     Router::new()
+        .route("/day-summary", get(trajectory::handlers::query_day_summary))
         .route("/", get(trajectory::handlers::query_trajectory))
 }
 

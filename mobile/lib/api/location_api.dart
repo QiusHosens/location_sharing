@@ -39,6 +39,12 @@ class LocationApi {
     return res['data'];
   }
 
+  /// [date] 格式 YYYY-MM-DD（与后端 UTC 日历日对齐）
+  Future<Map<String, dynamic>> getTrajectoryDaySummary(String date) async {
+    final res = await _client.get('/trajectory/day-summary', params: {'date': date});
+    return res['data'] as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> getNotifications({int page = 1, int pageSize = 20}) async {
     final res = await _client.get('/notifications', params: {'page': page, 'page_size': pageSize});
     return res['data'];

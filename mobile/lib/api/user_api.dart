@@ -28,8 +28,20 @@ class UserApi {
     await _client.delete('/groups/$id');
   }
 
+  /// 发送邀请（对方在「待处理邀请」同意后加入家庭组）
   Future<void> addMember(String groupId, String phone) async {
     await _client.post('/groups/$groupId/members', data: {'phone': phone});
+  }
+
+  Future<List<dynamic>> getFamilyInvitations() async {
+    final res = await _client.get('/groups/invitations');
+    final d = res['data'];
+    if (d is List) return d;
+    return [];
+  }
+
+  Future<void> respondFamilyInvitation(String invitationId, bool accept) async {
+    await _client.put('/groups/invitations/$invitationId', data: {'accept': accept});
   }
 
   Future<void> removeMember(String groupId, String memberId) async {
@@ -41,8 +53,10 @@ class UserApi {
     return res['data'];
   }
 
-  Future<void> requestSharing(String targetUserId) async {
-    await _client.post('/sharing', data: {'target_user_id': targetUserId});
+  Future<void> requestSharing(String phone) async {
+    final t = phone.trim();
+    if (t.isEmpty) return;
+    await _client.post('/sharing', data: {'phone': t});
   }
 
   Future<void> respondSharing(String id, bool accept) async {

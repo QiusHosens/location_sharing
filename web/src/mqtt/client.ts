@@ -3,7 +3,7 @@ import mqtt from 'mqtt';
 let mqttClient: mqtt.MqttClient | null = null;
 
 export function connectMqtt(userId: string, onLocationUpdate: (data: any) => void, onNotification: (data: any) => void) {
-  const brokerUrl = import.meta.env.VITE_MQTT_URL || 'ws://localhost:8083/mqtt';
+  const brokerUrl = import.meta.env.VITE_MQTT_URL || 'ws://192.168.0.95:40803/mqtt';
 
   mqttClient = mqtt.connect(brokerUrl, {
     clientId: `web_${userId}_${Date.now()}`,

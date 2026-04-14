@@ -13,8 +13,21 @@ allprojects {
     }
 }
 
+// 与 Flutter 插件内 FlutterExtension 字段对齐；插件子工程在 android { } 里写 flutter.compileSdkVersion 时，
+// 需在 com.android.library 配置前具备 project.flutter（AGP 8+ 闭包解析会误找 android.flutter）。
+class FlutterPluginCompat {
+    int compileSdkVersion = 35
+    int minSdkVersion = 21
+    int targetSdkVersion = 35
+}
+
 rootProject.buildDir = "../build"
 subprojects { subproject ->
+    subproject.beforeEvaluate {
+        if (subproject.name != "app" && subproject.extensions.findByName("flutter") == null) {
+            subproject.extensions.create("flutter", FlutterPluginCompat)
+        }
+    }
     subproject.buildDir = "${rootProject.buildDir}/${subproject.name}"
     // 仅补丁高德等旧 library：AGP 8+ 需 namespace，且勿对全量子工程 withId（会干扰 Flutter 主工程）
     if (subproject.name == "amap_flutter_location" || subproject.name == "amap_flutter_map") {
