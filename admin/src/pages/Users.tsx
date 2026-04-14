@@ -33,10 +33,10 @@ export default function UsersPage() {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>用户管理</Typography>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>用户管理</Typography>
         <TextField size="small" placeholder="搜索手机号或昵称" value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-          InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search /></InputAdornment> } }}
           sx={{ width: 280 }} />
       </Box>
       <TableContainer component={Paper}>

@@ -35,7 +35,7 @@ export default function LoginPage() {
         <CardContent sx={{ p: 4 }}>
           <Box sx={{ textAlign: 'center', mb: 3 }}>
             <LocationOn sx={{ fontSize: 48, color: 'primary.main' }} />
-            <Typography variant="h5" fontWeight={700}>定位共享管理后台</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>定位共享管理后台</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>请登录管理员账号</Typography>
           </Box>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -43,11 +43,11 @@ export default function LoginPage() {
             <TextField label="用户名" fullWidth required value={username} onChange={(e) => setUsername(e.target.value)} sx={{ mb: 2 }} />
             <TextField label="密码" type={showPwd ? 'text' : 'password'} fullWidth required value={password}
               onChange={(e) => setPassword(e.target.value)} sx={{ mb: 3 }}
-              InputProps={{ endAdornment: (
+              slotProps={{ input: { endAdornment: (
                 <InputAdornment position="end">
                   <IconButton onClick={() => setShowPwd(!showPwd)} edge="end">{showPwd ? <VisibilityOff /> : <Visibility />}</IconButton>
                 </InputAdornment>
-              ) }} />
+              ) } }} />
             <Button type="submit" variant="contained" fullWidth size="large" disabled={loading}>
               {loading ? '登录中...' : '登 录'}
             </Button>

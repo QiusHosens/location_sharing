@@ -29,10 +29,10 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} gutterBottom>仪表盘</Typography>
+      <Typography variant="h5" sx={{ fontWeight: 700 }} gutterBottom>仪表盘</Typography>
       <Grid container spacing={3}>
         {statCards.map((card) => (
-          <Grid item xs={12} sm={6} md={3} key={card.key}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} key={card.key}>
             <Card>
               <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: card.color + '15', color: card.color, display: 'flex' }}>
@@ -40,7 +40,7 @@ export default function DashboardPage() {
                 </Box>
                 <Box>
                   <Typography variant="body2" color="text.secondary">{card.label}</Typography>
-                  <Typography variant="h4" fontWeight={700}>{stats?.[card.key]?.toLocaleString() ?? '-'}</Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 700 }}>{stats?.[card.key]?.toLocaleString() ?? '-'}</Typography>
                 </Box>
               </CardContent>
             </Card>

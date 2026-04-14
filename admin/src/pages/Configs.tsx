@@ -77,7 +77,7 @@ export default function ConfigsPage() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} gutterBottom>系统配置</Typography>
+      <Typography variant="h5" sx={{ fontWeight: 700 }} gutterBottom>系统配置</Typography>
       <TableContainer component={Paper}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
