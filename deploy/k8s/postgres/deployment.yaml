@@ -25,11 +25,14 @@ spec:
               value: postgres
             - name: POSTGRES_DB
               value: location_sharing
+            - name: TZ
+              value: Asia/Shanghai
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: location-secrets
                   key: postgres-password
+          args: ["-c", "timezone=Asia/Shanghai"]
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql
