@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../api/location_api.dart';
+import '../utils/coord_transform.dart';
 
 const AMapPrivacyStatement _amapPrivacy = AMapPrivacyStatement(
   hasContains: true,
@@ -39,6 +40,14 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
   List<dynamic> _points = [];
   bool _loading = true;
   String? _error;
+
+  CoordPoint? _toGcjFromTrajectory(dynamic p) {
+    if (p is! Map) return null;
+    final lat = (p['latitude'] as num?)?.toDouble();
+    final lng = (p['longitude'] as num?)?.toDouble();
+    if (lat == null || lng == null) return null;
+    return wgs84ToGcj02(latitude: lat, longitude: lng);
+  }
 
   @override
   void initState() {
@@ -76,17 +85,21 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
     if (_points.isEmpty) {
       return const CameraPosition(target: LatLng(39.909187, 116.397451), zoom: 10);
     }
-    final p = _points.first;
-    final lat = (p['latitude'] as num).toDouble();
-    final lng = (p['longitude'] as num).toDouble();
-    return CameraPosition(target: LatLng(lat, lng), zoom: 15);
+    final gcj = _toGcjFromTrajectory(_points.first);
+    if (gcj == null) {
+      return const CameraPosition(target: LatLng(39.909187, 116.397451), zoom: 10);
+    }
+    return CameraPosition(target: LatLng(gcj.latitude, gcj.longitude), zoom: 15);
   }
 
   Set<Polyline> _polylines() {
     if (_points.length < 2) return {};
     final pts = _points
-        .map((p) => LatLng((p['latitude'] as num).toDouble(), (p['longitude'] as num).toDouble()))
+        .map(_toGcjFromTrajectory)
+        .whereType<CoordPoint>()
+        .map((p) => LatLng(p.latitude, p.longitude))
         .toList();
+    if (pts.length < 2) return {};
     return {
       Polyline(
         points: pts,
@@ -99,14 +112,15 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
   void _fitMap(AMapController c) {
     if (_points.isEmpty) return;
     if (_points.length == 1) {
-      final p = _points.first;
-      final lat = (p['latitude'] as num).toDouble();
-      final lng = (p['longitude'] as num).toDouble();
-      c.moveCamera(CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16));
+      final gcj = _toGcjFromTrajectory(_points.first);
+      if (gcj == null) return;
+      c.moveCamera(CameraUpdate.newLatLngZoom(LatLng(gcj.latitude, gcj.longitude), 16));
       return;
     }
-    final lats = _points.map((p) => (p['latitude'] as num).toDouble()).toList();
-    final lngs = _points.map((p) => (p['longitude'] as num).toDouble()).toList();
+    final gcjPoints = _points.map(_toGcjFromTrajectory).whereType<CoordPoint>().toList();
+    if (gcjPoints.isEmpty) return;
+    final lats = gcjPoints.map((p) => p.latitude).toList();
+    final lngs = gcjPoints.map((p) => p.longitude).toList();
     final bounds = LatLngBounds(
       southwest: LatLng(lats.reduce(math.min), lngs.reduce(math.min)),
       northeast: LatLng(lats.reduce(math.max), lngs.reduce(math.max)),

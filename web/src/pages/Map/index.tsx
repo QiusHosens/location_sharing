@@ -15,6 +15,7 @@ import { getGroups } from '@/api/user';
 import { useAuthStore } from '@/store/auth';
 import { connectMqtt, disconnectMqtt } from '@/mqtt/client';
 import { loadAmapScript } from '@/utils/amap';
+import { wgs84ToGcj02 } from '@/utils/coord';
 import { resolveMediaUrl } from '@/utils/mediaUrl';
 
 type LocRow = {
@@ -44,7 +45,8 @@ function dedupeLatest(locs: LocRow[]): LocRow[] {
 }
 
 function openAmapNavigation(lng: number, lat: number, name: string) {
-  const to = `${lng},${lat},${encodeURIComponent(name)}`;
+  const gcj = wgs84ToGcj02(lat, lng);
+  const to = `${gcj.longitude},${gcj.latitude},${encodeURIComponent(name)}`;
   window.open(`https://uri.amap.com/navigation?to=${to}&mode=car&src=location-sharing&coordinate=gaode`, '_blank');
 }
 
@@ -77,16 +79,17 @@ export default function MapPage() {
   const updateMarker = useCallback(
     (uid: string, lng: number, lat: number, label: string, isSelf: boolean) => {
       if (!mapInstance.current || !window.AMap) return;
+      const gcj = wgs84ToGcj02(lat, lng);
       const letter = (label && label[0]) || '?';
       const color = uid === userId ? brandBlue : '#22C55E';
       const content = buildMarkerContent(label, letter, color, isSelf);
       const existing = markersRef.current.get(uid);
       if (existing) {
-        existing.setPosition([lng, lat]);
+        existing.setPosition([gcj.longitude, gcj.latitude]);
         existing.setContent(content);
       } else {
         const marker = new window.AMap.Marker({
-          position: [lng, lat],
+          position: [gcj.longitude, gcj.latitude],
           content,
           anchor: new window.AMap.Pixel(-26, -70),
           offset: new window.AMap.Pixel(0, 0),
@@ -114,7 +117,8 @@ export default function MapPage() {
         };
         collected.push(row);
         updateMarker(userId, myLoc.longitude, myLoc.latitude, '我', true);
-        mapInstance.current?.setCenter([myLoc.longitude, myLoc.latitude]);
+        const gcj = wgs84ToGcj02(myLoc.latitude, myLoc.longitude);
+        mapInstance.current?.setCenter([gcj.longitude, gcj.latitude]);
       }
       const groups = await getGroups();
       for (const g of groups || []) {
@@ -186,6 +190,12 @@ export default function MapPage() {
   };
 
   const handleNotification = () => {};
+
+  const focusMember = useCallback((m: LocRow) => {
+    if (!mapInstance.current) return;
+    const gcj = wgs84ToGcj02(m.latitude, m.longitude);
+    mapInstance.current.setZoomAndCenter?.(16, [gcj.longitude, gcj.latitude]);
+  }, []);
 
   const panelList = useMemo(() => {
     return members
@@ -295,11 +305,13 @@ export default function MapPage() {
               return (
                 <Box
                   key={m.user_id}
+                  onClick={() => focusMember(m)}
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 1.5,
                     py: 1.5,
+                    cursor: 'pointer',
                     borderBottom: '1px solid',
                     borderColor: 'rgba(0,0,0,0.06)',
                     '&:last-child': { borderBottom: 'none' },
@@ -336,7 +348,10 @@ export default function MapPage() {
                   </Box>
                   <IconButton
                     size="small"
-                    onClick={() => openAmapNavigation(m.longitude, m.latitude, name)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAmapNavigation(m.longitude, m.latitude, name);
+                    }}
                     sx={{
                       bgcolor: brandBlue,
                       color: '#fff',

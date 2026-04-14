@@ -13,6 +13,7 @@ import '../api/user_api.dart';
 import '../providers/auth_provider.dart';
 import '../services/location_service.dart';
 import '../services/mqtt_service.dart';
+import '../utils/coord_transform.dart';
 
 /// 高德 SDK 8.1+ 要求首次展示地图前完成隐私合规；三者为 false 会白屏。
 /// 正式上架前应在隐私弹窗取得用户同意后再设为 true。
@@ -70,6 +71,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
   /// 延后一帧再挂载高德原生视图，减轻「VM Service 尚未就绪就加载 native .so」导致的调试连接失败；真机同样更稳。
   bool _mapSurfaceReady = false;
+
+  CoordPoint? _toGcjFromMap(Map<String, dynamic>? m) {
+    if (m == null) return null;
+    final lat = (m['latitude'] as num?)?.toDouble();
+    final lng = (m['longitude'] as num?)?.toDouble();
+    if (lat == null || lng == null) return null;
+    return wgs84ToGcj02(latitude: lat, longitude: lng);
+  }
 
   @override
   void initState() {
@@ -162,10 +171,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final m = _myLocation;
     final ctrl = _mapController;
     if (m == null || ctrl == null) return;
-    final lat = (m['latitude'] as num?)?.toDouble();
-    final lng = (m['longitude'] as num?)?.toDouble();
-    if (lat == null || lng == null) return;
-    ctrl.moveCamera(CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16));
+    final gcj = _toGcjFromMap(m);
+    if (gcj == null) return;
+    ctrl.moveCamera(
+      CameraUpdate.newLatLngZoom(LatLng(gcj.latitude, gcj.longitude), 16),
+    );
   }
 
   Future<void> _locateNow() async {
@@ -186,17 +196,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _focusMember(Map<String, dynamic> l) {
-    final lat = (l['latitude'] as num?)?.toDouble();
-    final lng = (l['longitude'] as num?)?.toDouble();
+    final gcj = _toGcjFromMap(l);
     final ctrl = _mapController;
-    if (lat == null || lng == null || ctrl == null) return;
-    ctrl.moveCamera(CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16));
+    if (gcj == null || ctrl == null) return;
+    ctrl.moveCamera(
+      CameraUpdate.newLatLngZoom(LatLng(gcj.latitude, gcj.longitude), 16),
+    );
   }
 
   Future<void> _openAmapNavigation(Map<String, dynamic> l) async {
-    final lat = (l['latitude'] as num?)?.toDouble();
-    final lng = (l['longitude'] as num?)?.toDouble();
-    if (lat == null || lng == null) {
+    final gcj = _toGcjFromMap(l);
+    if (gcj == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('该家人暂无有效定位，无法导航')),
@@ -211,10 +221,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final appUri = Uri.parse(
       'androidamap://navi?sourceApplication=location_sharing'
-      '&lat=$lat&lon=$lng&dev=0&style=2&poiname=$encodedName',
+      '&lat=${gcj.latitude}&lon=${gcj.longitude}&dev=0&style=2&poiname=$encodedName',
     );
     final webUri = Uri.parse(
-      'https://uri.amap.com/navigation?to=$lng,$lat,$encodedName'
+      'https://uri.amap.com/navigation?to=${gcj.longitude},${gcj.latitude},$encodedName'
       '&mode=car&src=location_sharing&coordinate=gaode&callnative=1',
     );
 
@@ -238,10 +248,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   CameraPosition _initialCameraPosition() {
     final m = _myLocation;
     if (m != null) {
-      final lat = (m['latitude'] as num?)?.toDouble();
-      final lng = (m['longitude'] as num?)?.toDouble();
-      if (lat != null && lng != null) {
-        return CameraPosition(target: LatLng(lat, lng), zoom: 16);
+      final gcj = _toGcjFromMap(m);
+      if (gcj != null) {
+        return CameraPosition(
+          target: LatLng(gcj.latitude, gcj.longitude),
+          zoom: 16,
+        );
       }
     }
     return const CameraPosition(
@@ -259,12 +271,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final markers = <Marker>{};
     final mine = _myLocation;
     if (mine != null) {
-      final myLat = (mine['latitude'] as num?)?.toDouble();
-      final myLng = (mine['longitude'] as num?)?.toDouble();
-      if (myLat != null && myLng != null) {
+      final gcj = _toGcjFromMap(mine);
+      if (gcj != null) {
         markers.add(
           Marker(
-            position: LatLng(myLat, myLng),
+            position: LatLng(gcj.latitude, gcj.longitude),
             icon: _dotMarkerIcon,
             anchor: const Offset(0.5, 0.5),
             infoWindow: const InfoWindow(title: '我', snippet: '当前位置'),
@@ -274,13 +285,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
 
     for (final l in _familyLocations) {
-      final lat = (l['latitude'] as num?)?.toDouble();
-      final lng = (l['longitude'] as num?)?.toDouble();
-      if (lat == null || lng == null) continue;
+      final gcj = _toGcjFromMap(l);
+      if (gcj == null) continue;
       final name = l['nickname']?.toString() ?? '家人';
       markers.add(
         Marker(
-          position: LatLng(lat, lng),
+          position: LatLng(gcj.latitude, gcj.longitude),
           icon: _dotMarkerIcon,
           anchor: const Offset(0.5, 0.5),
           infoWindow: InfoWindow(title: name),
