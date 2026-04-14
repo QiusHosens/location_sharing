@@ -20,6 +20,14 @@ export interface SharingRespondBody {
   accept: boolean;
 }
 
+export interface SharingRequestBody {
+  phone: string;
+}
+
+export interface SharingUpdateBody {
+  is_paused: boolean;
+}
+
 export interface ProfileUpdateBody {
   nickname: string;
 }
@@ -45,4 +53,9 @@ export function appendTrajectoryQuery(path: string, p: TrajectoryQueryParams): s
 export function appendNotificationListQuery(path: string, p: NotificationListParams): string {
   const q = 'page=' + encodeURIComponent(p.page) + '&page_size=' + encodeURIComponent(p.page_size);
   return path + '?' + q;
+}
+
+/** GET /trajectory/day-summary?date=YYYY-MM-DD */
+export function appendDaySummaryQuery(path: string, date: string): string {
+  return path + '?date=' + encodeURIComponent(date);
 }

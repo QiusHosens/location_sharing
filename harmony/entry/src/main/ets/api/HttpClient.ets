@@ -2,7 +2,7 @@ import { http } from '@kit.NetworkKit';
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
 
-const BASE_URL = 'http://localhost:8080/api/v1';
+const BASE_URL = 'http://192.168.0.39:8080/api/v1';
 
 function shouldRefreshOn401(path: string): boolean {
   return !path.includes('/auth/login') && !path.includes('/auth/register') && !path.includes('/auth/refresh');

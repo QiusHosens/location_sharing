@@ -1,6 +1,9 @@
 import { router } from '@kit.ArkUI';
+import { preferences } from '@kit.ArkData';
 import { HttpClient } from '../api/HttpClient';
 import { GroupCreateBody } from '../api/ApiPayloads';
+import { MainBottomNav } from '../components/MainBottomNav';
+import { AppTheme } from '../common/AppTheme';
 
 interface GroupMember {
   user_id: string;
@@ -22,14 +25,31 @@ struct FamilyPage {
   @State groups: FamilyGroup[] = [];
   @State showCreateDialog: boolean = false;
   @State newGroupName: string = '';
+  @State headerLetter: string = '?';
 
-  aboutToAppear(): void { this.loadGroups(); }
+  aboutToAppear(): void {
+    HttpClient.setContext(getContext(this));
+    void this.initHeader();
+    this.loadGroups();
+  }
+
+  async initHeader(): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(getContext(this), 'auth');
+      const phone = await store.get('phone', '') as string;
+      this.headerLetter = phone.length > 0 ? phone.substring(0, 1).toUpperCase() : '?';
+    } catch {
+      this.headerLetter = '?';
+    }
+  }
 
   async loadGroups(): Promise<void> {
     try {
       const res = await HttpClient.get('/groups') as Record<string, object>;
       this.groups = (res['data'] as FamilyGroup[]) ?? [];
-    } catch (e) {}
+    } catch {
+      /* ignore */
+    }
   }
 
   async createGroup(): Promise<void> {
@@ -39,80 +59,160 @@ struct FamilyPage {
       this.showCreateDialog = false;
       this.newGroupName = '';
       await this.loadGroups();
-    } catch (e) {}
+    } catch {
+      /* ignore */
+    }
   }
 
   async deleteGroup(id: string): Promise<void> {
-    try { await HttpClient.del('/groups/' + id); await this.loadGroups(); } catch (e) {}
+    try {
+      await HttpClient.del('/groups/' + id);
+      await this.loadGroups();
+    } catch {
+      /* ignore */
+    }
   }
 
   build() {
-    Column() {
+    Stack() {
+      Column() {
       Row() {
-        Text('家庭组').fontSize(20).fontWeight(FontWeight.Bold).layoutWeight(1)
-        Button('+').width(36).height(36).onClick(() => { this.showCreateDialog = true; })
-      }.width('100%').padding(16)
+        Text(this.headerLetter)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.brandBlue)
+          .width(44)
+          .height(44)
+          .borderRadius(22)
+          .textAlign(TextAlign.Center)
+          .backgroundColor('#E3F2FD')
+        Text('家庭')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.textPrimary)
+          .layoutWeight(1)
+          .margin({ left: 10 })
+        Button({ type: ButtonType.Circle }) {
+          Text('🔔').fontSize(16)
+        }
+          .width(40)
+          .height(40)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => router.pushUrl({ url: 'pages/NotificationsPage' }))
+        Button('+')
+          .fontSize(20)
+          .fontColor(AppTheme.accentBlue)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => { this.showCreateDialog = true; })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 8, top: 8, bottom: 12 })
 
       if (this.groups.length === 0) {
-        Text('暂无家庭组').fontSize(14).fontColor('#999').margin({ top: 64 })
+        Text('暂无家庭组')
+          .fontSize(15)
+          .fontColor(AppTheme.textSecondary)
+          .margin({ top: 64 })
+          .layoutWeight(1)
       } else {
         List() {
           ForEach(this.groups, (group: FamilyGroup) => {
             ListItem() {
               Column() {
                 Row() {
-                  Text(group.name).fontSize(16).fontWeight(FontWeight.Bold).layoutWeight(1)
-                  Text(group.members.length + '人').fontSize(12).fontColor('#999')
-                }.width('100%')
+                  Text(group.name)
+                    .fontSize(17)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor(AppTheme.textPrimary)
+                    .layoutWeight(1)
+                  Text(group.members.length + ' 人')
+                    .fontSize(12)
+                    .fontColor(AppTheme.textSecondary)
+                }
+                .width('100%')
                 ForEach(group.members, (m: GroupMember) => {
                   Row() {
-                    Text((m.nickname ?? m.phone)[0]).fontSize(12).fontColor(Color.White)
-                      .width(28).height(28).borderRadius(14).backgroundColor('#2196F3')
+                    Text((m.nickname ?? m.phone).substring(0, 1))
+                      .fontSize(12)
+                      .fontColor(Color.White)
+                      .width(28)
+                      .height(28)
+                      .borderRadius(14)
+                      .backgroundColor(AppTheme.accentBlue)
                       .textAlign(TextAlign.Center)
-                    Text(m.nickname ?? m.phone).fontSize(14).margin({ left: 8 }).layoutWeight(1)
-                    Text(m.role === 'owner' ? '创建者' : '成员').fontSize(12).fontColor('#999')
-                  }.width('100%').margin({ top: 8 })
+                    Text(m.nickname ?? m.phone)
+                      .fontSize(14)
+                      .fontColor(AppTheme.textPrimary)
+                      .margin({ left: 8 })
+                      .layoutWeight(1)
+                    Text(m.role === 'owner' ? '创建者' : '成员')
+                      .fontSize(12)
+                      .fontColor(AppTheme.textSecondary)
+                  }
+                  .width('100%')
+                  .margin({ top: 8 })
                 })
+                Button('删除该组')
+                  .fontSize(13)
+                  .fontColor('#E53935')
+                  .backgroundColor(Color.Transparent)
+                  .margin({ top: 12 })
+                  .onClick(() => void this.deleteGroup(group.id))
               }
               .width('100%')
               .padding(16)
               .backgroundColor(Color.White)
-              .borderRadius(12)
+              .borderRadius(16)
               .margin({ bottom: 12 })
             }
           })
-        }.width('100%').layoutWeight(1).padding({ left: 16, right: 16 })
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .padding({ left: 16, right: 16 })
       }
 
-      // 底部导航（复用结构）
-      Row() {
-        this.navItem('地图', 'pages/MapPage')
-        this.navItem('家庭', '')
-        this.navItem('共享', 'pages/SharingPage')
-        this.navItem('轨迹', 'pages/TrajectoryPage')
-        this.navItem('通知', 'pages/NotificationsPage')
-        this.navItem('设置', 'pages/SettingsPage')
-      }.width('100%').height(56).justifyContent(FlexAlign.SpaceAround).borderWidth({ top: 1 }).borderColor('#e0e0e0')
+      MainBottomNav({ currentIndex: 1 })
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(AppTheme.pageBg)
 
       if (this.showCreateDialog) {
-        Column() {
-          Text('创建家庭组').fontSize(18).fontWeight(FontWeight.Bold).margin({ bottom: 16 })
-          TextInput({ placeholder: '家庭组名称', text: this.newGroupName })
-            .onChange((val: string) => { this.newGroupName = val; }).width('100%').margin({ bottom: 16 })
-          Row() {
-            Button('取消').backgroundColor('#eee').fontColor('#333').onClick(() => { this.showCreateDialog = false; }).layoutWeight(1).margin({ right: 8 })
-            Button('创建').onClick(() => this.createGroup()).layoutWeight(1)
-          }.width('100%')
+      Column() {
+        Text('创建家庭组')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.textPrimary)
+          .margin({ bottom: 16 })
+        TextInput({ placeholder: '家庭组名称', text: this.newGroupName })
+          .onChange((val: string) => {
+            this.newGroupName = val;
+          })
+          .width('100%')
+          .margin({ bottom: 16 })
+        Row() {
+          Button('取消')
+            .layoutWeight(1)
+            .backgroundColor('#EEEEEE')
+            .fontColor('#333333')
+            .onClick(() => { this.showCreateDialog = false; })
+          Button('创建')
+            .layoutWeight(1)
+            .margin({ left: 8 })
+            .backgroundColor(AppTheme.accentBlue)
+            .onClick(() => void this.createGroup())
         }
-        .width('80%').padding(24).backgroundColor(Color.White).borderRadius(16)
-        .position({ x: '10%', y: '30%' })
+        .width('100%')
       }
-    }.width('100%').height('100%').backgroundColor('#f5f5f5')
-  }
-
-  @Builder navItem(label: string, page: string) {
-    Column() {
-      Text(label).fontSize(12).fontColor(page === '' ? '#2196F3' : '#999')
-    }.onClick(() => { if (page) router.replaceUrl({ url: page }); }).justifyContent(FlexAlign.Center).height('100%')
+      .width('86%')
+      .padding(24)
+      .backgroundColor(Color.White)
+      .borderRadius(16)
+      .position({ x: '7%', y: '28%' })
+      }
+    }
+    .width('100%')
+    .height('100%')
   }
 }

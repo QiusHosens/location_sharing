@@ -39,6 +39,7 @@ pnpm-debug.log*
 **/.hvigor/
 **/oh_modules/
 **/local.properties
+**/.preview/
 
 # 日志与临时文件
 *.log

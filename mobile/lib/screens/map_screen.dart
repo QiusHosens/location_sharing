@@ -63,10 +63,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   List<Map<String, dynamic>> _familyLocations = [];
   Map<String, dynamic>? _myLocation;
   AMapController? _mapController;
+  /// 延后一帧再挂载高德原生视图，减轻「VM Service 尚未就绪就加载 native .so」导致的调试连接失败；真机同样更稳。
+  bool _mapSurfaceReady = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 400), () {
+        if (mounted) setState(() => _mapSurfaceReady = true);
+      });
+    });
     _init();
   }
 
@@ -454,14 +461,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         children: [
           Positioned.fill(
             child: showMap
-                ? AMapWidget(
-                    privacyStatement: _amapPrivacy,
-                    apiKey: const AMapApiKey(androidKey: _kAmapAndroidKey),
-                    initialCameraPosition: _initialCameraPosition(),
-                    myLocationStyleOptions: MyLocationStyleOptions(true),
-                    markers: _buildMarkers(),
-                    onMapCreated: _onMapCreated,
-                  )
+                ? (!_mapSurfaceReady
+                    ? Container(
+                        color: const Color(0xFF1A1A1A),
+                        child: const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : AMapWidget(
+                        privacyStatement: _amapPrivacy,
+                        apiKey: const AMapApiKey(androidKey: _kAmapAndroidKey),
+                        initialCameraPosition: _initialCameraPosition(),
+                        myLocationStyleOptions: MyLocationStyleOptions(true),
+                        markers: _buildMarkers(),
+                        onMapCreated: _onMapCreated,
+                      ))
                 : _buildUnsupportedMap(),
           ),
           SafeArea(

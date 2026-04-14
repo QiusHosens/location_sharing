@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart' show TargetPlatform;
 import 'package:battery_plus/battery_plus.dart';
 import 'package:geolocator/geolocator.dart';
@@ -41,15 +42,18 @@ class LocationService {
 
   LocationSettings _locationSettings() {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      // Debug 下不启前台服务通知，避免部分模拟器 / Android 15+ 上 FGS 与调试器冲突导致进程退出
       return AndroidSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: _kMinMoveMetersInt,
-        foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: '定位共享',
-          notificationText: '正在后台持续定位并上传位置',
-          notificationChannelName: '定位共享',
-          enableWakeLock: true,
-        ),
+        foregroundNotificationConfig: kDebugMode
+            ? null
+            : const ForegroundNotificationConfig(
+                notificationTitle: '定位共享',
+                notificationText: '正在后台持续定位并上传位置',
+                notificationChannelName: '定位共享',
+                enableWakeLock: true,
+              ),
       );
     }
     return const LocationSettings(

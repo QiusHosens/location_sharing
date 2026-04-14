@@ -26,14 +26,25 @@ export class LocationService {
     }
   }
 
-  startContinuousLocation(callback: (loc: geoLocationManager.Location) => void): void {
-    const request: geoLocationManager.LocationRequest = {
-      priority: geoLocationManager.LocationRequestPriority.FIRST_FIX,
-      scenario: geoLocationManager.LocationRequestScenario.NAVIGATION,
-      timeInterval: 5,
-      distanceInterval: 5,
-    };
-    geoLocationManager.on('locationChange', request, callback);
+  /**
+   * 注册连续定位。若系统「定位服务」总开关关闭（常见错误码 3301100），返回 false 且不抛错。
+   */
+  startContinuousLocation(callback: (loc: geoLocationManager.Location) => void): boolean {
+    try {
+      if (!geoLocationManager.isLocationEnabled()) {
+        return false;
+      }
+      const request: geoLocationManager.LocationRequest = {
+        priority: geoLocationManager.LocationRequestPriority.FIRST_FIX,
+        scenario: geoLocationManager.LocationRequestScenario.NAVIGATION,
+        timeInterval: 5,
+        distanceInterval: 5,
+      };
+      geoLocationManager.on('locationChange', request, callback);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   stopContinuousLocation(): void {
