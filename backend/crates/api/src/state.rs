@@ -3,6 +3,17 @@ use std::path::Path;
 use sha2::{Digest, Sha384};
 use sqlx::PgPool;
 
+fn env_flag(name: &str, default: bool) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|v| match v.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => true,
+            "0" | "false" | "no" | "off" => false,
+            _ => default,
+        })
+        .unwrap_or(default)
+}
+
 /// 与 sqlx 内置迁移一致：`Sha384::digest(sql.as_bytes())`（见 sqlx-core `Migration::new`）
 fn sha384_checksum(sql: &str) -> Vec<u8> {
     Sha384::digest(sql.as_bytes()).to_vec()
@@ -82,15 +93,16 @@ impl AppState {
 
         let db = PgPool::connect(&database_url).await?;
 
-        if std::env::var("SQLX_MIGRATE_REPAIR")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false)
-        {
+        if env_flag("SQLX_MIGRATE_REPAIR", false) {
             tracing::warn!("SQLX_MIGRATE_REPAIR is set: syncing _sqlx_migrations checksums from disk (dev only)");
             repair_sqlx_migration_checksums(&db).await?;
         }
 
-        sqlx::migrate!("../../migrations").run(&db).await?;
+        if env_flag("SQLX_MIGRATE_ON_START", true) {
+            sqlx::migrate!("../../migrations").run(&db).await?;
+        } else {
+            tracing::warn!("SQLX_MIGRATE_ON_START is disabled: skip running sqlx migrations on startup");
+        }
 
         let redis_client = redis::Client::open(redis_url)?;
         let redis = redis::aio::ConnectionManager::new(redis_client).await?;
