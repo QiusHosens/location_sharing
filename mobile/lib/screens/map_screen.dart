@@ -1,9 +1,12 @@
+import 'dart:ui' as ui;
+
 import 'package:amap_flutter_base/amap_flutter_base.dart';
 import 'package:amap_flutter_map/amap_flutter_map.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/location_api.dart';
 import '../api/user_api.dart';
@@ -63,12 +66,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   List<Map<String, dynamic>> _familyLocations = [];
   Map<String, dynamic>? _myLocation;
   AMapController? _mapController;
+  BitmapDescriptor _dotMarkerIcon =
+      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
   /// 延后一帧再挂载高德原生视图，减轻「VM Service 尚未就绪就加载 native .so」导致的调试连接失败；真机同样更稳。
   bool _mapSurfaceReady = false;
 
   @override
   void initState() {
     super.initState();
+    _prepareDotMarkerIcon();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future<void>.delayed(const Duration(milliseconds: 400), () {
         if (mounted) setState(() => _mapSurfaceReady = true);
@@ -118,6 +124,35 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  Future<void> _prepareDotMarkerIcon() async {
+    try {
+      const size = 128.0;
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final center = Offset(size / 2, size / 2);
+
+      final outerPaint = Paint()..color = const Color(0x553E7FA5);
+      canvas.drawCircle(center, 48, outerPaint);
+
+      final middlePaint = Paint()..color = Colors.white;
+      canvas.drawCircle(center, 32, middlePaint);
+
+      final innerPaint = Paint()..color = const Color(0xFF0D66D0);
+      canvas.drawCircle(center, 24, innerPaint);
+
+      final image = await recorder.endRecording().toImage(size.toInt(), size.toInt());
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) return;
+      final bytes = data.buffer.asUint8List();
+      if (!mounted) return;
+      setState(() {
+        _dotMarkerIcon = BitmapDescriptor.fromBytes(bytes);
+      });
+    } catch (_) {
+      // 失败时保留默认 marker，避免影响地图功能。
+    }
+  }
+
   void _onMapCreated(AMapController controller) {
     _mapController = controller;
     _moveCameraToMyLocation();
@@ -133,12 +168,71 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     ctrl.moveCamera(CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16));
   }
 
+  Future<void> _locateNow() async {
+    final pos = await _locationService.getCurrentPosition();
+    if (!mounted) return;
+    if (pos == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('定位失败，请检查定位权限和系统定位开关')),
+      );
+      return;
+    }
+
+    setState(() {
+      _myLocation = {'longitude': pos.longitude, 'latitude': pos.latitude};
+    });
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _moveCameraToMyLocation());
+  }
+
   void _focusMember(Map<String, dynamic> l) {
     final lat = (l['latitude'] as num?)?.toDouble();
     final lng = (l['longitude'] as num?)?.toDouble();
     final ctrl = _mapController;
     if (lat == null || lng == null || ctrl == null) return;
     ctrl.moveCamera(CameraUpdate.newLatLngZoom(LatLng(lat, lng), 16));
+  }
+
+  Future<void> _openAmapNavigation(Map<String, dynamic> l) async {
+    final lat = (l['latitude'] as num?)?.toDouble();
+    final lng = (l['longitude'] as num?)?.toDouble();
+    if (lat == null || lng == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('该家人暂无有效定位，无法导航')),
+      );
+      return;
+    }
+
+    final name = l['nickname']?.toString().trim().isNotEmpty == true
+        ? l['nickname'].toString().trim()
+        : '家人';
+    final encodedName = Uri.encodeComponent(name);
+
+    final appUri = Uri.parse(
+      'androidamap://navi?sourceApplication=location_sharing'
+      '&lat=$lat&lon=$lng&dev=0&style=2&poiname=$encodedName',
+    );
+    final webUri = Uri.parse(
+      'https://uri.amap.com/navigation?to=$lng,$lat,$encodedName'
+      '&mode=car&src=location_sharing&coordinate=gaode&callnative=1',
+    );
+
+    final launchedApp = await launchUrl(
+      appUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (launchedApp) return;
+
+    final launchedWeb = await launchUrl(
+      webUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (launchedWeb || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('无法打开高德地图，请确认已安装')),
+    );
   }
 
   CameraPosition _initialCameraPosition() {
@@ -163,15 +257,35 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   Set<Marker> _buildMarkers() {
     final markers = <Marker>{};
+    final mine = _myLocation;
+    if (mine != null) {
+      final myLat = (mine['latitude'] as num?)?.toDouble();
+      final myLng = (mine['longitude'] as num?)?.toDouble();
+      if (myLat != null && myLng != null) {
+        markers.add(
+          Marker(
+            position: LatLng(myLat, myLng),
+            icon: _dotMarkerIcon,
+            anchor: const Offset(0.5, 0.5),
+            infoWindow: const InfoWindow(title: '我', snippet: '当前位置'),
+          ),
+        );
+      }
+    }
+
     for (final l in _familyLocations) {
       final lat = (l['latitude'] as num?)?.toDouble();
       final lng = (l['longitude'] as num?)?.toDouble();
       if (lat == null || lng == null) continue;
       final name = l['nickname']?.toString() ?? '家人';
-      markers.add(Marker(
-        position: LatLng(lat, lng),
-        infoWindow: InfoWindow(title: name),
-      ));
+      markers.add(
+        Marker(
+          position: LatLng(lat, lng),
+          icon: _dotMarkerIcon,
+          anchor: const Offset(0.5, 0.5),
+          infoWindow: InfoWindow(title: name),
+        ),
+      );
     }
     return markers;
   }
@@ -266,6 +380,34 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  Widget _amapNavigateGlyph() {
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Transform.rotate(
+            angle: 0.78539816339, // 45deg
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1976D2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          const Icon(
+            Icons.turn_right,
+            color: Colors.white,
+            size: 16,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _batteryPill(int? percent, int index) {
     final green = percent != null ? percent >= 50 : (index % 2 == 0);
     final label = percent != null ? '$percent%' : '—';
@@ -313,57 +455,76 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: Colors.blue.shade50,
-            child: Text(
-              letter,
-              style: TextStyle(
-                  color: Colors.blue.shade700, fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.place_outlined,
-                        size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        '上次更新 $timeLabel',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  onNavigateBeforeFocus?.call();
+                  _focusMember(l);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Colors.blue.shade50,
+                        child: Text(
+                          letter,
+                          style: TextStyle(
+                              color: Colors.blue.shade700,
+                              fontWeight: FontWeight.w600),
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name,
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(Icons.place_outlined,
+                                    size: 16, color: Colors.grey[600]),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    '上次更新 $timeLabel',
+                                    style: TextStyle(
+                                        fontSize: 13, color: Colors.grey[700]),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      _batteryPill(batt, index),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
-          _batteryPill(batt, index),
           const SizedBox(width: 8),
           Material(
             color: Colors.blue,
             shape: const CircleBorder(),
             child: InkWell(
               customBorder: const CircleBorder(),
-              onTap: () {
-                onNavigateBeforeFocus?.call();
-                _focusMember(l);
-              },
-              child: const SizedBox(
+              onTap: () => _openAmapNavigation(l),
+              child: SizedBox(
                 width: 44,
                 height: 44,
-                child: Icon(Icons.navigation, color: Colors.white, size: 22),
+                child: Center(child: _amapNavigateGlyph()),
               ),
             ),
           ),
@@ -500,7 +661,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     _roundMapActionButton(
                       icon: Icons.my_location,
                       tooltip: '回到我的位置',
-                      onPressed: _moveCameraToMyLocation,
+                      onPressed: _locateNow,
                     ),
                     const SizedBox(height: 12),
                     _roundMapActionButton(
