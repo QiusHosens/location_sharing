@@ -26,13 +26,26 @@ export default function NotificationsPage() {
   const handleMarkAll = async () => { await markAllRead(); load(); };
 
   return (
-    <Box sx={{ p: 2, maxWidth: 600, mx: 'auto' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="h5" fontWeight={700}>通知中心</Typography>
-          {unreadCount > 0 && <Chip label={`${unreadCount} 条未读`} color="error" size="small" />}
+    <Box sx={{ p: 2, pb: 10, maxWidth: 680, mx: 'auto' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="h5" sx={{ color: '#111827', fontWeight: 800 }}>
+            通知中心
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            家庭邀请与系统消息
+          </Typography>
         </Box>
-        {unreadCount > 0 && <Button startIcon={<DoneAll />} onClick={handleMarkAll} size="small">全部已读</Button>}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+          {unreadCount > 0 && (
+            <>
+              <Chip label={`${unreadCount} 条未读`} color="error" size="small" />
+              <Button startIcon={<DoneAll />} onClick={handleMarkAll} size="small" variant="outlined">
+                全部已读
+              </Button>
+            </>
+          )}
+        </Box>
       </Box>
       {loading ? <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress /></Box> : (
         <List>
@@ -42,7 +55,9 @@ export default function NotificationsPage() {
               <ListItem sx={{ bgcolor: n.is_read ? 'transparent' : 'action.hover', borderRadius: 1 }}
                 secondaryAction={!n.is_read ? <IconButton size="small" onClick={() => handleMarkRead(n.id)}><MarkEmailRead /></IconButton> : null}>
                 <ListItemText
-                  primary={<Typography fontWeight={n.is_read ? 400 : 600}>{n.title || n.type}</Typography>}
+                  primary={
+                    <Typography sx={{ fontWeight: n.is_read ? 400 : 600 }}>{n.title || n.type}</Typography>
+                  }
                   secondary={<>{n.body && <Typography variant="body2" color="text.secondary">{n.body}</Typography>}
                     <Typography variant="caption" color="text.disabled">{new Date(n.created_at).toLocaleString('zh-CN')}</Typography></>}
                 />

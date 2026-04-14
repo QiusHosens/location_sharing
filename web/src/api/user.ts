@@ -10,6 +10,14 @@ export async function updateProfile(params: { nickname?: string; avatar_url?: st
   return data.data;
 }
 
+/** multipart 字段名 `file`，与移动端一致 */
+export async function uploadAvatar(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await api.post('/users/profile/avatar', form);
+  return data.data;
+}
+
 export async function getGroups() {
   const { data } = await api.get('/groups');
   return data.data;
@@ -62,4 +70,9 @@ export async function updateSharing(id: string, params: { is_paused?: boolean; v
 
 export async function deleteSharing(id: string) {
   await api.delete(`/sharing/${id}`);
+}
+
+/** 与同家庭成员之间的位置共享开关（owner=当前用户，viewer=对方） */
+export async function setSharingPeer(viewerId: string, enabled: boolean) {
+  await api.put(`/sharing/peer/${viewerId}`, { enabled });
 }

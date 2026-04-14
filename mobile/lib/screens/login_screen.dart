@@ -188,20 +188,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         style:
                             TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
                     const Spacer(),
-                    // TextButton(
-                    //   onPressed: () {
-                    //     ScaffoldMessenger.of(context).showSnackBar(
-                    //       const SnackBar(content: Text('忘记密码功能即将开放')),
-                    //     );
-                    //   },
-                    //   style: TextButton.styleFrom(
-                    //     padding: EdgeInsets.zero,
-                    //     minimumSize: Size.zero,
-                    //     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    //     foregroundColor: _kBrandBlue,
-                    //   ),
-                    //   child: const Text('忘记密码', style: TextStyle(fontSize: 13)),
-                    // ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -274,51 +260,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ),
-        // const SizedBox(height: 28),
-        // Text(
-        //   '其他登录方式',
-        //   textAlign: TextAlign.center,
-        //   style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-        // ),
-        // const SizedBox(height: 16),
-        // Row(
-        //   mainAxisAlignment: MainAxisAlignment.center,
-        //   children: [
-        //     _circleIconButton(
-        //       icon: Icons.chat_bubble_outline,
-        //       onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-        //         const SnackBar(content: Text('微信登录即将开放')),
-        //       ),
-        //     ),
-        //     const SizedBox(width: 32),
-        //     _circleIconButton(
-        //       icon: Icons.fingerprint,
-        //       onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-        //         const SnackBar(content: Text('指纹登录即将开放')),
-        //       ),
-        //     ),
-        //   ],
-        // ),
-        // const SizedBox(height: 36),
-        // Row(
-        //   mainAxisAlignment: MainAxisAlignment.center,
-        //   children: [
-        //     Container(
-        //       width: 8,
-        //       height: 8,
-        //       decoration: const BoxDecoration(
-        //           color: Color(0xFF22C55E), shape: BoxShape.circle),
-        //     ),
-        //     const SizedBox(width: 8),
-        //     Text(
-        //       'GUARDIAN LINK SECURE ENCRYPTION',
-        //       style: TextStyle(
-        //           fontSize: 11,
-        //           letterSpacing: 0.3,
-        //           color: Colors.grey.shade600),
-        //     ),
-        //   ],
-        // ),
         const SizedBox(height: 16),
       ],
     );
@@ -343,12 +284,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               fontWeight: FontWeight.w800,
               color: Color(0xFF111827)),
         ),
-        // const SizedBox(height: 4),
-        // Text(
-        //   _kGuardianSubtitle,
-        //   style: TextStyle(
-        //       fontSize: 12, letterSpacing: 1.2, color: Colors.grey.shade600),
-        // ),
       ],
     );
   }
