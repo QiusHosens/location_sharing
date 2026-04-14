@@ -11,7 +11,7 @@ class MqttService {
   Function(Map<String, dynamic>)? onNotification;
 
   Future<void> connect(String userId,
-      {String host = '192.168.0.95', int port = 41883}) async {
+      {String host = 'www.synerunify.com', int port = 41883}) async {
     final clientId = 'flutter_${userId.hashCode & 0x7fffffff}';
     _client = MqttServerClient(host, clientId);
     _client!.port = port;
