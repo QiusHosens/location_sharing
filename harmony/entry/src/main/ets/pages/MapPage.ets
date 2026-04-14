@@ -75,8 +75,24 @@ function dedupeFamilyRows(rows: FamilyLocRow[]): FamilyLocRow[] {
   return out;
 }
 
-/** 高德地图 Key，前端写死（不向后台请求） */
+/** 高德地图 Key（接入鸿蒙 MapComponent 时使用），前端写死 */
 const AMAP_ANDROID_KEY: string = 'f17f663b9f38700e72b4f54b35044c7d';
+
+function batteryHigh(batt: number | undefined, index: number): boolean {
+  if (batt !== undefined) {
+    return batt >= 50;
+  }
+  return index % 2 === 0;
+}
+
+function rowToneIndex(userId: string): number {
+  let n = 0;
+  const len = userId.length;
+  for (let i = 0; i < len; i++) {
+    n += userId.charCodeAt(i);
+  }
+  return n % 2;
+}
 
 @Entry
 @Component
@@ -85,7 +101,6 @@ struct MapPage {
   @State myLng: number = 0;
   @State familyLocations: FamilyLocRow[] = [];
   @State headerLetter: string = '?';
-  @State showFamilyPanel: boolean = false;
   private locationService: LocationService = new LocationService();
 
   aboutToAppear(): void {
@@ -173,185 +188,200 @@ struct MapPage {
     }
   }
 
-  batteryGreen(batt: number | undefined, index: number): boolean {
-    if (batt !== undefined) {
-      return batt >= 50;
-    }
-    return index % 2 === 0;
+  onNavTap(): void {
+    promptAction.showToast({ message: '导航将使用系统地图打开' });
   }
 
   build() {
     Column() {
-      Row() {
+      Stack() {
+        Column() {
+          Column() {
+            Text(this.headerLetter)
+              .fontSize(22)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Color.White)
+              .width(64)
+              .height(64)
+              .borderRadius(32)
+              .textAlign(TextAlign.Center)
+              .backgroundColor(AppTheme.accentBlue)
+              .borderWidth(4)
+              .borderColor(AppTheme.brandBlue)
+            Text('我')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.textPrimary)
+              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+              .backgroundColor(Color.White)
+              .borderRadius(10)
+              .margin({ top: 8 })
+              .shadow({ radius: 6, color: '#00000018', offsetY: 2 })
+            Row() {
+              Text('●')
+                .fontSize(14)
+                .fontColor(AppTheme.accentBlue)
+            }
+            .margin({ top: 6 })
+          }
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+          .width('100%')
+          .height('100%')
+          .linearGradient({
+            angle: 180,
+            colors: [['#D6E4F0', 0.0], ['#E8EDF3', 0.45], ['#DCE8F0', 1.0]]
+          })
+        }
+        .width('100%')
+        .height('100%')
+
         Row() {
           Text(this.headerLetter)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.brandBlue)
-            .width(40)
-            .height(40)
-            .borderRadius(20)
+            .fontColor(AppTheme.textPrimary)
+            .width(44)
+            .height(44)
+            .borderRadius(22)
             .textAlign(TextAlign.Center)
-            .backgroundColor('#E3F2FD')
+            .backgroundColor('#F0F4F8')
+            .borderWidth(1)
+            .borderColor('#E5E7EB')
           Text('位置共享')
             .fontSize(18)
-            .fontWeight(FontWeight.Medium)
+            .fontWeight(FontWeight.Bold)
             .fontColor(AppTheme.textPrimary)
             .layoutWeight(1)
             .textAlign(TextAlign.Center)
           Button({ type: ButtonType.Circle }) {
-            Text('🔔').fontSize(16)
+            Text('🔔')
+              .fontSize(18)
+              .fontColor('#111827')
           }
-            .width(40)
-            .height(40)
+            .width(44)
+            .height(44)
             .backgroundColor(Color.Transparent)
             .onClick(() => router.pushUrl({ url: 'pages/NotificationsPage' }))
         }
         .width('100%')
-        .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .margin({ left: 16, right: 16, top: 10 })
         .backgroundColor('#FFFFFFF2')
         .borderRadius(28)
-        .margin({ left: 12, right: 12, top: 8 })
-      }
+        .shadow({ radius: 12, color: '#00000014', offsetY: 4 })
+        .align(Alignment.TopStart)
 
-      Stack() {
-        Column() {
-          Text('⌖').fontSize(40).fontColor(AppTheme.brandBlue)
-          Text('地图区域').fontSize(14).fontColor(AppTheme.textSecondary).margin({ top: 8 })
-          Text('高德 Key 已配置，可接入鸿蒙地图 SDK')
-            .fontSize(12)
-            .fontColor('#CCCCCC')
-            .margin({ top: 4 })
-          if (this.myLng !== 0) {
-            Text('经度 ' + this.myLng.toFixed(6) + '  纬度 ' + this.myLat.toFixed(6))
-              .fontSize(12)
-              .fontColor(AppTheme.textSecondary)
-              .margin({ top: 12 })
-          }
-        }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor('#E8EDF3')
-
-        Column() {
-          Blank()
-          Column() {
-            Button({ type: ButtonType.Circle }) {
-              Text('⊙').fontSize(18).fontColor(AppTheme.brandBlue)
-            }
-              .width(48)
-              .height(48)
-              .backgroundColor(Color.White)
-              .onClick(() => void this.loadLocations())
-            Button({ type: ButtonType.Circle }) {
-              Text('☰').fontSize(18).fontColor(AppTheme.brandBlue)
-            }
-              .width(48)
-              .height(48)
-              .backgroundColor(Color.White)
-              .margin({ top: 12 })
-              .onClick(() => { this.showFamilyPanel = !this.showFamilyPanel; })
-          }
-          .alignItems(HorizontalAlign.End)
-          .margin({ right: 16, bottom: 16 })
-        }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.End)
-      }
-      .layoutWeight(1)
-
-      if (this.showFamilyPanel) {
         Column() {
           Row()
-            .width(40)
+            .width(36)
             .height(4)
-            .backgroundColor('#CCCCCC')
+            .backgroundColor('#D1D5DB')
             .borderRadius(2)
-            .margin({ top: 8, bottom: 8 })
+            .margin({ top: 10, bottom: 12 })
+
           Row() {
             Text('家人状态')
               .fontSize(18)
-              .fontWeight(FontWeight.Medium)
+              .fontWeight(FontWeight.Bold)
               .fontColor(AppTheme.textPrimary)
               .layoutWeight(1)
             Button({ type: ButtonType.Circle }) {
-              Text('↻').fontSize(18)
+              Text('↻')
+                .fontSize(20)
+                .fontColor(AppTheme.textSecondary)
             }
-              .width(36)
-              .height(36)
+              .width(40)
+              .height(40)
               .backgroundColor(Color.Transparent)
               .onClick(() => void this.loadLocations())
           }
           .width('100%')
-          .padding({ left: 16, right: 8 })
+          .padding({ left: 4, right: 4 })
 
           if (this.familyLocations.length === 0) {
             Text('暂无家人位置')
               .fontSize(14)
               .fontColor(AppTheme.textSecondary)
-              .margin({ top: 24, bottom: 24 })
+              .margin({ top: 20, bottom: 28 })
           } else {
             List() {
-              ForEach(this.familyLocations, (m: FamilyLocRow, idx: number) => {
+              ForEach(this.familyLocations, (m: FamilyLocRow) => {
                 ListItem() {
                   Row() {
                     Text(m.nickname.length > 0 ? m.nickname.substring(0, 1) : '?')
-                      .fontSize(14)
+                      .fontSize(16)
                       .fontWeight(FontWeight.Medium)
-                      .fontColor(AppTheme.brandBlue)
+                      .fontColor(Color.White)
                       .width(48)
                       .height(48)
                       .borderRadius(24)
                       .textAlign(TextAlign.Center)
-                      .backgroundColor('#E3F2FD')
+                      .backgroundColor(AppTheme.accentBlue)
                     Column() {
                       Text(m.nickname)
                         .fontSize(16)
-                        .fontWeight(FontWeight.Medium)
+                        .fontWeight(FontWeight.Bold)
                         .fontColor(AppTheme.textPrimary)
                       Row() {
-                        Text('上次更新 ' + fmtRecordedAt(m.recorded_at))
+                        Text(batteryHigh(m.battery_level, rowToneIndex(m.user_id)) ? '🏠' : '📍')
+                          .fontSize(14)
+                          .margin({ right: 4 })
+                        Text(batteryHigh(m.battery_level, rowToneIndex(m.user_id)) ?
+                          '在家' :
+                          ('出行中 · 上次 ' + fmtRecordedAt(m.recorded_at)))
                           .fontSize(13)
-                          .fontColor(AppTheme.textSecondary)
-                      }.margin({ top: 4 })
+                          .fontColor(batteryHigh(m.battery_level, rowToneIndex(m.user_id)) ? '#2E7D32' : AppTheme.textSecondary)
+                      }
+                      .margin({ top: 6 })
                     }
                     .alignItems(HorizontalAlign.Start)
                     .layoutWeight(1)
                     .margin({ left: 12 })
 
-                    Text(m.battery_level !== undefined ? (m.battery_level + '%') : '—')
-                      .fontSize(12)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor(this.batteryGreen(m.battery_level, idx) ? '#2E7D32' : '#E65100')
-                      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                      .borderRadius(20)
-                      .backgroundColor(this.batteryGreen(m.battery_level, idx) ? '#E8F5E9' : '#FFF3E0')
+                    Row() {
+                      Text('🔋')
+                        .fontSize(12)
+                      Text(m.battery_level !== undefined ? (m.battery_level + '%') : '—')
+                        .fontSize(12)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(batteryHigh(m.battery_level, rowToneIndex(m.user_id)) ? '#2E7D32' : '#E65100')
+                    }
+                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                    .borderRadius(20)
+                    .backgroundColor(batteryHigh(m.battery_level, rowToneIndex(m.user_id)) ? '#E8F5E9' : '#FFF3E0')
 
                     Button({ type: ButtonType.Circle }) {
-                      Text('➤').fontSize(16).fontColor(Color.White)
+                      Text('➤')
+                        .fontSize(16)
+                        .fontColor(Color.White)
                     }
                       .width(44)
                       .height(44)
-                      .backgroundColor(AppTheme.brandBlue)
+                      .backgroundColor('#4FC3F7')
                       .onClick(() => {
-                        this.showFamilyPanel = false;
+                        this.onNavTap();
                       })
                   }
                   .width('100%')
-                  .padding({ top: 8, bottom: 8, left: 16, right: 16 })
+                  .padding({ top: 10, bottom: 10 })
                 }
               })
             }
-            .height(280)
+            .height(220)
             .width('100%')
+            .margin({ top: 4 })
           }
         }
         .width('100%')
+        .padding({ left: 16, right: 16 })
         .backgroundColor(Color.White)
-        .borderRadius({ topLeft: 24, topRight: 24 })
+        .borderRadius({ topLeft: 28, topRight: 28 })
+        .shadow({ radius: 20, color: '#00000018', offsetY: -4 })
+        .align(Alignment.BottomStart)
       }
+      .layoutWeight(1)
+      .width('100%')
 
       MainBottomNav({ currentIndex: 0 })
     }
