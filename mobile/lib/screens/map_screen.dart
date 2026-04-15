@@ -1,11 +1,8 @@
-import 'dart:ui' as ui;
-
-import 'package:amap_flutter_base/amap_flutter_base.dart';
-import 'package:amap_flutter_map/amap_flutter_map.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/location_api.dart';
@@ -15,16 +12,9 @@ import '../services/location_service.dart';
 import '../services/mqtt_service.dart';
 import '../utils/coord_transform.dart';
 
-/// 高德 SDK 8.1+ 要求首次展示地图前完成隐私合规；三者为 false 会白屏。
-/// 正式上架前应在隐私弹窗取得用户同意后再设为 true。
-const AMapPrivacyStatement _amapPrivacy = AMapPrivacyStatement(
-  hasContains: true,
-  hasShow: true,
-  hasAgree: true,
-);
-
-/// 高德 Android Key（客户端内置，不请求后台）
-const String _kAmapAndroidKey = '75499ac31c1dba8d9ffebc451f5332d3';
+const String _kAmapTileUrlTemplate =
+    'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}';
+const List<String> _kAmapTileSubdomains = ['1', '2', '3', '4'];
 
 List<Map<String, dynamic>> _dedupeFamilyLocations(
     List<Map<String, dynamic>> raw) {
@@ -64,13 +54,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   final MqttService _mqttService = MqttService();
   final LocationApi _locationApi = LocationApi();
   final UserApi _userApi = UserApi();
+  final MapController _mapController = MapController();
   List<Map<String, dynamic>> _familyLocations = [];
   Map<String, dynamic>? _myLocation;
-  AMapController? _mapController;
-  BitmapDescriptor _dotMarkerIcon =
-      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
-  /// 延后一帧再挂载高德原生视图，减轻「VM Service 尚未就绪就加载 native .so」导致的调试连接失败；真机同样更稳。
-  bool _mapSurfaceReady = false;
+  bool _mapReady = false;
 
   CoordPoint? _toGcjFromMap(Map<String, dynamic>? m) {
     if (m == null) return null;
@@ -83,12 +70,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   void initState() {
     super.initState();
-    _prepareDotMarkerIcon();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future<void>.delayed(const Duration(milliseconds: 400), () {
-        if (mounted) setState(() => _mapSurfaceReady = true);
-      });
-    });
     _init();
   }
 
@@ -133,49 +114,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  Future<void> _prepareDotMarkerIcon() async {
-    try {
-      const size = 128.0;
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      final center = Offset(size / 2, size / 2);
-
-      final outerPaint = Paint()..color = const Color(0x553E7FA5);
-      canvas.drawCircle(center, 48, outerPaint);
-
-      final middlePaint = Paint()..color = Colors.white;
-      canvas.drawCircle(center, 32, middlePaint);
-
-      final innerPaint = Paint()..color = const Color(0xFF0D66D0);
-      canvas.drawCircle(center, 24, innerPaint);
-
-      final image = await recorder.endRecording().toImage(size.toInt(), size.toInt());
-      final data = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (data == null) return;
-      final bytes = data.buffer.asUint8List();
-      if (!mounted) return;
-      setState(() {
-        _dotMarkerIcon = BitmapDescriptor.fromBytes(bytes);
-      });
-    } catch (_) {
-      // 失败时保留默认 marker，避免影响地图功能。
-    }
-  }
-
-  void _onMapCreated(AMapController controller) {
-    _mapController = controller;
-    _moveCameraToMyLocation();
-  }
-
   void _moveCameraToMyLocation() {
     final m = _myLocation;
-    final ctrl = _mapController;
-    if (m == null || ctrl == null) return;
+    if (m == null || !_mapReady) return;
     final gcj = _toGcjFromMap(m);
     if (gcj == null) return;
-    ctrl.moveCamera(
-      CameraUpdate.newLatLngZoom(LatLng(gcj.latitude, gcj.longitude), 16),
-    );
+    _mapController.move(LatLng(gcj.latitude, gcj.longitude), 16);
   }
 
   Future<void> _locateNow() async {
@@ -197,11 +141,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   void _focusMember(Map<String, dynamic> l) {
     final gcj = _toGcjFromMap(l);
-    final ctrl = _mapController;
-    if (gcj == null || ctrl == null) return;
-    ctrl.moveCamera(
-      CameraUpdate.newLatLngZoom(LatLng(gcj.latitude, gcj.longitude), 16),
-    );
+    if (gcj == null || !_mapReady) return;
+    _mapController.move(LatLng(gcj.latitude, gcj.longitude), 16);
   }
 
   Future<void> _openAmapNavigation(Map<String, dynamic> l) async {
@@ -245,40 +186,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  CameraPosition _initialCameraPosition() {
+  LatLng _initialCenter() {
     final m = _myLocation;
     if (m != null) {
       final gcj = _toGcjFromMap(m);
       if (gcj != null) {
-        return CameraPosition(
-          target: LatLng(gcj.latitude, gcj.longitude),
-          zoom: 16,
-        );
+        return LatLng(gcj.latitude, gcj.longitude);
       }
     }
-    return const CameraPosition(
-      target: LatLng(39.909187, 116.397451),
-      zoom: 10,
-    );
+    return const LatLng(39.909187, 116.397451);
   }
 
-  bool get _showAmap {
-    if (kIsWeb) return false;
-    return defaultTargetPlatform == TargetPlatform.android;
-  }
-
-  Set<Marker> _buildMarkers() {
-    final markers = <Marker>{};
+  List<Marker> _buildMarkers() {
+    final markers = <Marker>[];
     final mine = _myLocation;
     if (mine != null) {
       final gcj = _toGcjFromMap(mine);
       if (gcj != null) {
         markers.add(
           Marker(
-            position: LatLng(gcj.latitude, gcj.longitude),
-            icon: _dotMarkerIcon,
-            anchor: const Offset(0.5, 0.5),
-            infoWindow: const InfoWindow(title: '我', snippet: '当前位置'),
+            point: LatLng(gcj.latitude, gcj.longitude),
+            width: 48,
+            height: 48,
+            child: _mapPin('我', true),
           ),
         );
       }
@@ -290,41 +220,33 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       final name = l['nickname']?.toString() ?? '家人';
       markers.add(
         Marker(
-          position: LatLng(gcj.latitude, gcj.longitude),
-          icon: _dotMarkerIcon,
-          anchor: const Offset(0.5, 0.5),
-          infoWindow: InfoWindow(title: name),
+          point: LatLng(gcj.latitude, gcj.longitude),
+          width: 48,
+          height: 48,
+          child: _mapPin(name.isEmpty ? '家' : name[0], false),
         ),
       );
     }
     return markers;
   }
 
-  Widget _buildUnsupportedMap() {
+  Widget _mapPin(String text, bool mine) {
     return Container(
-      color: Colors.grey[200],
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.map, size: 80, color: Colors.grey[400]),
-              const SizedBox(height: 8),
-              Text(
-                '地图未就绪',
-                style: TextStyle(color: Colors.grey[600], fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                defaultTargetPlatform == TargetPlatform.iOS
-                    ? '当前为 iOS，请配置 iosKey 后使用高德地图'
-                    : '当前平台不支持高德地图组件',
-                style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: mine ? const Color(0xFF0D66D0) : const Color(0xFF43A047),
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.fade,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
         ),
       ),
     );
@@ -338,7 +260,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       elevation: 4,
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(28),
-      color: Colors.white.withOpacity(0.95),
+      color: Colors.white.withValues(alpha: 0.95),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Row(
@@ -458,7 +380,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final letter = name.isNotEmpty ? name[0] : '?';
     final timeLabel = _fmtRecordedAt(l['recorded_at']?.toString());
     final rawBatt = l['battery_level'];
-    final batt = rawBatt is int ? rawBatt : (rawBatt is num ? rawBatt.toInt() : null);
+    final batt =
+        rawBatt is int ? rawBatt : (rawBatt is num ? rawBatt.toInt() : null);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -622,8 +545,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final showMap = _showAmap;
-
     return Scaffold(
       extendBody: true,
       backgroundColor: Colors.black,
@@ -631,23 +552,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: showMap
-                ? (!_mapSurfaceReady
-                    ? Container(
-                        color: const Color(0xFF1A1A1A),
-                        child: const Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                    : AMapWidget(
-                        privacyStatement: _amapPrivacy,
-                        apiKey: const AMapApiKey(androidKey: _kAmapAndroidKey),
-                        initialCameraPosition: _initialCameraPosition(),
-                        myLocationStyleOptions: MyLocationStyleOptions(true),
-                        markers: _buildMarkers(),
-                        onMapCreated: _onMapCreated,
-                      ))
-                : _buildUnsupportedMap(),
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _initialCenter(),
+                initialZoom: 16,
+                onMapReady: () {
+                  _mapReady = true;
+                  _moveCameraToMyLocation();
+                },
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: _kAmapTileUrlTemplate,
+                  subdomains: _kAmapTileSubdomains,
+                  userAgentPackageName: 'com.ls.location_sharing',
+                ),
+                MarkerLayer(markers: _buildMarkers()),
+              ],
+            ),
           ),
           SafeArea(
             bottom: false,

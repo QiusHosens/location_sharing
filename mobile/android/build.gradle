@@ -16,9 +16,9 @@ allprojects {
 // 与 Flutter 插件内 FlutterExtension 字段对齐；插件子工程在 android { } 里写 flutter.compileSdkVersion 时，
 // 需在 com.android.library 配置前具备 project.flutter（AGP 8+ 闭包解析会误找 android.flutter）。
 class FlutterPluginCompat {
-    int compileSdkVersion = 35
+    int compileSdkVersion = 36
     int minSdkVersion = 21
-    int targetSdkVersion = 35
+    int targetSdkVersion = 36
 }
 
 rootProject.buildDir = "../build"
@@ -29,29 +29,10 @@ subprojects { subproject ->
         }
     }
     subproject.buildDir = "${rootProject.buildDir}/${subproject.name}"
-    // 仅补丁高德等旧 library：AGP 8+ 需 namespace，且勿对全量子工程 withId（会干扰 Flutter 主工程）
-    if (subproject.name == "amap_flutter_location" || subproject.name == "amap_flutter_map") {
-        subproject.plugins.withId("com.android.library") {
-            subproject.android {
-                def manifestFile = subproject.file("src/main/AndroidManifest.xml")
-                if (manifestFile.exists()) {
-                    def text = manifestFile.getText("UTF-8")
-                    def matcher = text =~ /package="([^"]+)"/
-                    if (matcher.find()) {
-                        def pkg = matcher.group(1)
-                        if (namespace == null || namespace.toString().isEmpty()) {
-                            namespace = pkg
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // 高德 amap_flutter_* 等插件仍写 compileSdk 29，依赖资源引用 android:attr/lStar（API 31+）会导致 verifyReleaseResources 失败
     subproject.afterEvaluate {
         if (subproject.plugins.hasPlugin("com.android.library")) {
             subproject.android {
-                compileSdk 35
+                compileSdk 36
             }
         }
     }

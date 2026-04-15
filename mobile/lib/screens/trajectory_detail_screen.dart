@@ -1,20 +1,15 @@
 import 'dart:math' as math;
 
-import 'package:amap_flutter_base/amap_flutter_base.dart';
-import 'package:amap_flutter_map/amap_flutter_map.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../api/location_api.dart';
 import '../utils/coord_transform.dart';
 
-const AMapPrivacyStatement _amapPrivacy = AMapPrivacyStatement(
-  hasContains: true,
-  hasShow: true,
-  hasAgree: true,
-);
-
-const String _kAmapAndroidKey = '75499ac31c1dba8d9ffebc451f5332d3';
+const String _kAmapTileUrlTemplate =
+    'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}';
+const List<String> _kAmapTileSubdomains = ['1', '2', '3', '4'];
 
 /// 在地图上展示某用户某时段内的全部轨迹点（折线）
 class TrajectoryDetailScreen extends StatefulWidget {
@@ -37,9 +32,11 @@ class TrajectoryDetailScreen extends StatefulWidget {
 
 class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
   final LocationApi _api = LocationApi();
+  final MapController _mapController = MapController();
   List<dynamic> _points = [];
   bool _loading = true;
   String? _error;
+  bool _mapReady = false;
 
   CoordPoint? _toGcjFromTrajectory(dynamic p) {
     if (p is! Map) return null;
@@ -61,12 +58,14 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
       _error = null;
     });
     try {
-      final res = await _api.getTrajectory(widget.userId, widget.startIso, widget.endIso);
+      final res = await _api.getTrajectory(
+          widget.userId, widget.startIso, widget.endIso);
       if (!mounted) return;
       setState(() {
         _points = res['points'] as List? ?? [];
         _loading = false;
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fitMap());
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -76,75 +75,86 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
     }
   }
 
-  bool get _showAmap {
-    if (kIsWeb) return false;
-    return defaultTargetPlatform == TargetPlatform.android;
-  }
-
-  CameraPosition _initialCamera() {
+  LatLng _initialCenter() {
     if (_points.isEmpty) {
-      return const CameraPosition(target: LatLng(39.909187, 116.397451), zoom: 10);
+      return const LatLng(39.909187, 116.397451);
     }
     final gcj = _toGcjFromTrajectory(_points.first);
     if (gcj == null) {
-      return const CameraPosition(target: LatLng(39.909187, 116.397451), zoom: 10);
+      return const LatLng(39.909187, 116.397451);
     }
-    return CameraPosition(target: LatLng(gcj.latitude, gcj.longitude), zoom: 15);
+    return LatLng(gcj.latitude, gcj.longitude);
   }
 
-  Set<Polyline> _polylines() {
-    if (_points.length < 2) return {};
-    final pts = _points
+  List<LatLng> _polylinePoints() {
+    return _points
         .map(_toGcjFromTrajectory)
         .whereType<CoordPoint>()
         .map((p) => LatLng(p.latitude, p.longitude))
         .toList();
-    if (pts.length < 2) return {};
-    return {
-      Polyline(
-        points: pts,
-        width: 6,
-        color: const Color(0xCC1976D2),
-      ),
-    };
   }
 
-  void _fitMap(AMapController c) {
-    if (_points.isEmpty) return;
-    if (_points.length == 1) {
-      final gcj = _toGcjFromTrajectory(_points.first);
-      if (gcj == null) return;
-      c.moveCamera(CameraUpdate.newLatLngZoom(LatLng(gcj.latitude, gcj.longitude), 16));
+  void _fitMap() {
+    if (!_mapReady) return;
+    final pts = _polylinePoints();
+    if (pts.isEmpty) return;
+    if (pts.length == 1) {
+      _mapController.move(pts.first, 16);
       return;
     }
-    final gcjPoints = _points.map(_toGcjFromTrajectory).whereType<CoordPoint>().toList();
-    if (gcjPoints.isEmpty) return;
-    final lats = gcjPoints.map((p) => p.latitude).toList();
-    final lngs = gcjPoints.map((p) => p.longitude).toList();
+    final lats = pts.map((p) => p.latitude).toList();
+    final lngs = pts.map((p) => p.longitude).toList();
     final bounds = LatLngBounds(
-      southwest: LatLng(lats.reduce(math.min), lngs.reduce(math.min)),
-      northeast: LatLng(lats.reduce(math.max), lngs.reduce(math.max)),
+      LatLng(lats.reduce(math.min), lngs.reduce(math.min)),
+      LatLng(lats.reduce(math.max), lngs.reduce(math.max)),
     );
-    c.moveCamera(CameraUpdate.newLatLngBounds(bounds, 48));
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(48),
+        maxZoom: 17,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final polylinePoints = _polylinePoints();
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title, style: const TextStyle(fontSize: 16))),
+      appBar: AppBar(
+          title: Text(widget.title, style: const TextStyle(fontSize: 16))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : !_showAmap
-                  ? const Center(child: Text('当前平台不支持高德轨迹地图'))
-                  : AMapWidget(
-                      privacyStatement: _amapPrivacy,
-                      apiKey: const AMapApiKey(androidKey: _kAmapAndroidKey),
-                      initialCameraPosition: _initialCamera(),
-                      polylines: _polylines(),
-                      onMapCreated: _fitMap,
+              : FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _initialCenter(),
+                    initialZoom: 15,
+                    onMapReady: () {
+                      _mapReady = true;
+                      _fitMap();
+                    },
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: _kAmapTileUrlTemplate,
+                      subdomains: _kAmapTileSubdomains,
+                      userAgentPackageName: 'com.ls.location_sharing',
                     ),
+                    if (polylinePoints.length >= 2)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: polylinePoints,
+                            color: const Color(0xCC1976D2),
+                            strokeWidth: 6,
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
     );
   }
 }

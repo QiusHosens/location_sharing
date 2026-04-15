@@ -7,10 +7,10 @@ plugins {
 
 android {
     namespace = "com.ls.location_sharing"
-    // 至少 35：flutter_plugin_android_lifecycle 等插件要求；不低于 Flutter 模板默认值
-    compileSdk = Math.max(flutter.compileSdkVersion as int, 35)
-    // 与当前 AGP / 多数插件声明的 NDK 对齐（高于 Flutter 默认 23.x）
-    ndkVersion = "25.1.8937393"
+    // 与 Flutter 3.35 模板对齐，且满足新插件对 API 级别的要求
+    compileSdk = Math.max(flutter.compileSdkVersion as int, 36)
+    // 与当前 Android 插件生态声明对齐，避免构建期间 NDK 版本告警
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         coreLibraryDesugaringEnabled true
@@ -28,16 +28,9 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = Math.max(flutter.targetSdkVersion as int, 35)
+        targetSdk = Math.max(flutter.targetSdkVersion as int, 36)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
-        // 高德地图
-        ndk {
-            //设置支持的SO库架构（开发者可以根据需要，选择一个或多个平台的so）
-            // abiFilters "armeabi", "armeabi-v7a", "arm64-v8a", "x86","x86_64"
-            abiFilters "armeabi", "armeabi-v7a", "arm64-v8a", "x86","x86_64"
-        }
     }
 
     buildTypes {
@@ -54,9 +47,6 @@ flutter {
 }
 
 dependencies {
-    // 与 AGP 8.3 配套的 desugar 版本；flutter_local_notifications 等依赖需开启 desugaring
-    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
-    // 高德 Flutter 插件将原生 SDK 标为 compileOnly，必须在 app 侧 implementation 才会打进 APK（否则 NoClassDefFoundError: AMapOptions）
-    implementation "com.amap.api:3dmap:8.1.0"
-    implementation "com.amap.api:location:5.6.0"
+    // 与较新 AGP 组合搭配，供本项目通知等插件使用 Java 新 API
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
 }
