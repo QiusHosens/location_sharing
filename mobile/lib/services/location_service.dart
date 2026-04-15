@@ -10,9 +10,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../api/location_api.dart';
 import '../app_logger.dart';
 
-/// 与 [AndroidSettings.distanceFilter] 一致：位移不足该米数时系统不向 stream 投递新点。
-const int _kMinMoveMetersInt = 5;
-const double _kMinMoveMeters = 5.0;
+/// 上传阈值：仅当位移达到该距离才上报到服务端。
+const double _kMinMoveMeters = 3.0;
 
 class LocationService {
   final LocationApi _api = LocationApi();
@@ -42,10 +41,11 @@ class LocationService {
 
   LocationSettings _locationSettings() {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      // Debug 下不启前台服务通知，避免部分模拟器 / Android 15+ 上 FGS 与调试器冲突导致进程退出
+      // 持续获取当前位置用于地图刷新；上传阈值在 maybeUpload 内单独控制。
       return AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: _kMinMoveMetersInt,
+        distanceFilter: 0,
+        intervalDuration: const Duration(seconds: 3),
         foregroundNotificationConfig: kDebugMode
             ? null
             : const ForegroundNotificationConfig(
@@ -58,16 +58,65 @@ class LocationService {
     }
     return const LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: _kMinMoveMetersInt,
+      distanceFilter: 0,
+    );
+  }
+
+  /// 单次定位：有历史定位时快速超时（3s），无历史定位时给更长等待（30s）。
+  LocationSettings _singleShotSettings(Duration timeout) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 0,
+        timeLimit: timeout,
+      );
+    }
+    return LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 0,
+      timeLimit: timeout,
     );
   }
 
   Future<Position?> getCurrentPosition() async {
     if (!await requestPermission()) return null;
-    return Geolocator.getCurrentPosition(locationSettings: _locationSettings());
+    Position? lastKnown;
+    try {
+      lastKnown = await Geolocator.getLastKnownPosition();
+    } catch (_) {}
+
+    final timeout = lastKnown != null
+        ? const Duration(seconds: 3)
+        : const Duration(seconds: 30);
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: _singleShotSettings(timeout),
+      );
+    } on TimeoutException catch (e, st) {
+      appLogger.w(
+        '单次定位超时（${timeout.inSeconds}s），回退最近一次定位',
+        error: e,
+        stackTrace: st,
+      );
+      return lastKnown;
+    } catch (e, st) {
+      appLogger.w('单次定位失败，回退最近一次定位', error: e, stackTrace: st);
+      return lastKnown;
+    }
   }
 
-  /// 位移不足 [_kMinMoveMeters] 时 [Geolocator.getPositionStream] 不回调；
+  /// 仅返回最近一次系统缓存定位，不主动发起新定位请求。
+  Future<Position?> getLastKnownPosition() async {
+    if (!await requestPermission()) return null;
+    try {
+      return await Geolocator.getLastKnownPosition();
+    } catch (e, st) {
+      appLogger.w('获取最近定位失败', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  /// 持续监听系统定位流并回调 [onLocation] 刷新地图；
   /// 上传仅在相对「上次成功上传」位移 ≥ [_kMinMoveMeters] 时执行（含首次无基准点的一次上传）。
   Future<bool> startTracking({Function(Position)? onLocation}) async {
     if (!await requestPermission()) return false;
@@ -110,14 +159,15 @@ class LocationService {
 
     _subscription = Geolocator.getPositionStream(locationSettings: settings)
         .listen((position) {
-      onLocation?.call(position);
-      unawaited(maybeUpload(position));
-    });
+          onLocation?.call(position);
+          unawaited(maybeUpload(position));
+        });
 
-    // 首次单点仅上传（相对无「上次上传」视为有变化）；界面上的 onLocation 仅由 stream 在位移≥5m 时触发
+    // 首次尽快拿到一个可用点，提升首屏体验。
     try {
-      final first =
-          await Geolocator.getCurrentPosition(locationSettings: settings);
+      final first = await getCurrentPosition();
+      if (first == null) return true;
+      onLocation?.call(first);
       await maybeUpload(first);
     } catch (e, st) {
       appLogger.w('首次定位失败', error: e, stackTrace: st);

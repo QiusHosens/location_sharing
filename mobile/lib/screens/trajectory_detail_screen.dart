@@ -1,15 +1,11 @@
-import 'dart:math' as math;
+import 'dart:convert';
 
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
+import '../api/config_api.dart';
 import '../api/location_api.dart';
 import '../utils/coord_transform.dart';
-
-const String _kAmapTileUrlTemplate =
-    'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}';
-const List<String> _kAmapTileSubdomains = ['1', '2', '3', '4'];
 
 /// 在地图上展示某用户某时段内的全部轨迹点（折线）
 class TrajectoryDetailScreen extends StatefulWidget {
@@ -31,11 +27,14 @@ class TrajectoryDetailScreen extends StatefulWidget {
 }
 
 class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
+  final ConfigApi _configApi = ConfigApi();
   final LocationApi _api = LocationApi();
-  final MapController _mapController = MapController();
-  List<dynamic> _points = [];
+  WebViewController? _webViewController;
+  List<Map<String, dynamic>> _points = [];
   bool _loading = true;
   String? _error;
+  bool _mapLoading = true;
+  String? _mapError;
   bool _mapReady = false;
 
   CoordPoint? _toGcjFromTrajectory(dynamic p) {
@@ -49,23 +48,86 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadTrajectory();
+    _initMapWebView();
   }
 
-  Future<void> _load() async {
+  Future<void> _initMapWebView() async {
+    setState(() {
+      _mapLoading = true;
+      _mapError = null;
+    });
+    try {
+      final cfg = await _configApi.getMapConfig();
+      final webKey = cfg.webKey.trim();
+      if (webKey.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _mapLoading = false;
+          _mapError = '高德地图 key 未配置';
+        });
+        return;
+      }
+      final c = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.black)
+        ..addJavaScriptChannel(
+          'MapBridge',
+          onMessageReceived: (msg) {
+            final m = msg.message;
+            if (m == 'ready') {
+              if (!mounted) return;
+              setState(() {
+                _mapReady = true;
+                _mapLoading = false;
+              });
+              _syncTrajectoryToMap();
+            } else if (m.startsWith('error:')) {
+              if (!mounted) return;
+              setState(() {
+                _mapLoading = false;
+                _mapError = m.substring(6);
+              });
+            }
+          },
+        )
+        ..loadHtmlString(
+          _buildTrajectoryHtml(
+            key: webKey,
+            securitySecret: cfg.webSecuritySecret.trim(),
+          ),
+        );
+      if (!mounted) return;
+      setState(() => _webViewController = c);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _mapLoading = false;
+        _mapError = '地图配置加载失败';
+      });
+    }
+  }
+
+  Future<void> _loadTrajectory() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final res = await _api.getTrajectory(
-          widget.userId, widget.startIso, widget.endIso);
+        widget.userId,
+        widget.startIso,
+        widget.endIso,
+      );
       if (!mounted) return;
       setState(() {
-        _points = res['points'] as List? ?? [];
+        _points = (res['points'] as List? ?? [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
         _loading = false;
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) => _fitMap());
+      _syncTrajectoryToMap();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -75,86 +137,150 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
     }
   }
 
-  LatLng _initialCenter() {
-    if (_points.isEmpty) {
-      return const LatLng(39.909187, 116.397451);
-    }
-    final gcj = _toGcjFromTrajectory(_points.first);
-    if (gcj == null) {
-      return const LatLng(39.909187, 116.397451);
-    }
-    return LatLng(gcj.latitude, gcj.longitude);
-  }
-
-  List<LatLng> _polylinePoints() {
+  List<Map<String, dynamic>> _trajectoryPayload() {
     return _points
         .map(_toGcjFromTrajectory)
         .whereType<CoordPoint>()
-        .map((p) => LatLng(p.latitude, p.longitude))
+        .map((p) => {'lng': p.longitude, 'lat': p.latitude})
         .toList();
   }
 
-  void _fitMap() {
-    if (!_mapReady) return;
-    final pts = _polylinePoints();
-    if (pts.isEmpty) return;
-    if (pts.length == 1) {
-      _mapController.move(pts.first, 16);
-      return;
-    }
-    final lats = pts.map((p) => p.latitude).toList();
-    final lngs = pts.map((p) => p.longitude).toList();
-    final bounds = LatLngBounds(
-      LatLng(lats.reduce(math.min), lngs.reduce(math.min)),
-      LatLng(lats.reduce(math.max), lngs.reduce(math.max)),
+  Future<void> _runMapJs(String script) async {
+    if (!_mapReady || _webViewController == null) return;
+    try {
+      await _webViewController!.runJavaScript(script);
+    } catch (_) {}
+  }
+
+  void _syncTrajectoryToMap() {
+    final pointsJson = jsonEncode(_trajectoryPayload());
+    _runMapJs(
+      'window.LSTrajectoryMap && window.LSTrajectoryMap.setTrajectory($pointsJson);',
     );
-    _mapController.fitCamera(
-      CameraFit.bounds(
-        bounds: bounds,
-        padding: const EdgeInsets.all(48),
-        maxZoom: 17,
-      ),
-    );
+  }
+
+  String _buildTrajectoryHtml({
+    required String key,
+    required String securitySecret,
+  }) {
+    final keyJs = jsonEncode(key);
+    final secJs = jsonEncode(securitySecret);
+    return '''
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <style>
+    html, body, #map { width:100%; height:100%; margin:0; padding:0; background:#1a1a1a; overflow:hidden; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    (function() {
+      const key = $keyJs;
+      const securitySecret = $secJs;
+      const bridge = window.MapBridge;
+      const post = (msg) => bridge && bridge.postMessage && bridge.postMessage(msg);
+      if (securitySecret) {
+        window._AMapSecurityConfig = { securityJsCode: securitySecret };
+      }
+
+      let map = null;
+      let polyline = null;
+      let startMarker = null;
+      let endMarker = null;
+      const clearMarkers = () => {
+        if (!map) return;
+        if (startMarker) map.remove(startMarker);
+        if (endMarker) map.remove(endMarker);
+        startMarker = null;
+        endMarker = null;
+      };
+
+      window.LSTrajectoryMap = {
+        setTrajectory(points) {
+          if (!map) return;
+          const list = Array.isArray(points)
+            ? points.map((p) => [Number(p.lng), Number(p.lat)]).filter((p) => !Number.isNaN(p[0]) && !Number.isNaN(p[1]))
+            : [];
+          if (polyline) {
+            map.remove(polyline);
+            polyline = null;
+          }
+          clearMarkers();
+          if (list.length === 0) return;
+          if (list.length === 1) {
+            const p = list[0];
+            startMarker = new window.AMap.Marker({ position: p, title: '轨迹点' });
+            map.add(startMarker);
+            map.setZoomAndCenter(16, p);
+            return;
+          }
+          polyline = new window.AMap.Polyline({
+            path: list,
+            strokeColor: '#1976D2',
+            strokeWeight: 6,
+            strokeOpacity: 0.8,
+            lineJoin: 'round',
+            lineCap: 'round'
+          });
+          startMarker = new window.AMap.Marker({ position: list[0], title: '起点' });
+          endMarker = new window.AMap.Marker({ position: list[list.length - 1], title: '终点' });
+          map.add([polyline, startMarker, endMarker]);
+          map.setFitView([polyline], false, [48, 48, 48, 48], 17);
+        }
+      };
+
+      const script = document.createElement('script');
+      script.src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(key);
+      script.async = true;
+      script.onload = () => {
+        map = new window.AMap.Map('map', {
+          zoom: 14,
+          center: [116.397428, 39.90923],
+          viewMode: '2D'
+        });
+        map.on('complete', () => post('ready'));
+      };
+      script.onerror = () => post('error:高德脚本加载失败');
+      document.head.appendChild(script);
+    })();
+  </script>
+</body>
+</html>
+''';
   }
 
   @override
   Widget build(BuildContext context) {
-    final polylinePoints = _polylinePoints();
     return Scaffold(
       appBar: AppBar(
-          title: Text(widget.title, style: const TextStyle(fontSize: 16))),
+        title: Text(widget.title, style: const TextStyle(fontSize: 16)),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: _initialCenter(),
-                    initialZoom: 15,
-                    onMapReady: () {
-                      _mapReady = true;
-                      _fitMap();
-                    },
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: _kAmapTileUrlTemplate,
-                      subdomains: _kAmapTileSubdomains,
-                      userAgentPackageName: 'com.ls.location_sharing',
-                    ),
-                    if (polylinePoints.length >= 2)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: polylinePoints,
-                            color: const Color(0xCC1976D2),
-                            strokeWidth: 6,
-                          ),
-                        ],
-                      ),
-                  ],
+          ? Center(child: Text(_error!))
+          : _mapError != null
+          ? Center(child: Text(_mapError!))
+          : _webViewController == null
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              children: [
+                Positioned.fill(
+                  child: WebViewWidget(controller: _webViewController!),
                 ),
+                if (_mapLoading)
+                  const Positioned.fill(
+                    child: ColoredBox(
+                      color: Color(0x33000000),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }

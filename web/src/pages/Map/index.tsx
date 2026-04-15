@@ -63,8 +63,8 @@ export default function MapPage() {
       s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const dot = isSelf
       ? '<div style="width:10px;height:10px;background:#fff;border:3px solid ' +
-        esc(color) +
-        ';border-radius:50%;margin-top:2px;box-shadow:0 1px 4px rgba(0,0,0,.2)"></div>'
+      esc(color) +
+      ';border-radius:50%;margin-top:2px;box-shadow:0 1px 4px rgba(0,0,0,.2)"></div>'
       : '';
     return `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:auto;">
       <div style="width:52px;height:52px;border-radius:50%;background:${esc(color)};color:#fff;
@@ -189,7 +189,7 @@ export default function MapPage() {
     });
   };
 
-  const handleNotification = () => {};
+  const handleNotification = () => { };
 
   const focusMember = useCallback((m: LocRow) => {
     if (!mapInstance.current) return;
