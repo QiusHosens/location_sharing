@@ -55,7 +55,7 @@ flutter {
 
 dependencies {
     // 与 AGP 8.3 配套的 desugar 版本；flutter_local_notifications 等依赖需开启 desugaring
-    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"
     // 高德 Flutter 插件将原生 SDK 标为 compileOnly，必须在 app 侧 implementation 才会打进 APK（否则 NoClassDefFoundError: AMapOptions）
     implementation "com.amap.api:3dmap:8.1.0"
     implementation "com.amap.api:location:5.6.0"

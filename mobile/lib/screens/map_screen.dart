@@ -8,13 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../amap_config.dart';
 import '../api/location_api.dart';
 import '../api/user_api.dart';
 import '../providers/auth_provider.dart';
 import '../services/location_service.dart';
 import '../services/mqtt_service.dart';
-import '../utils/coord_transform.dart';
-
 /// 高德 SDK 8.1+ 要求首次展示地图前完成隐私合规；三者为 false 会白屏。
 /// 正式上架前应在隐私弹窗取得用户同意后再设为 true。
 const AMapPrivacyStatement _amapPrivacy = AMapPrivacyStatement(
@@ -22,9 +21,6 @@ const AMapPrivacyStatement _amapPrivacy = AMapPrivacyStatement(
   hasShow: true,
   hasAgree: true,
 );
-
-/// 高德 Android Key（客户端内置，不请求后台）
-const String _kAmapAndroidKey = '75499ac31c1dba8d9ffebc451f5332d3';
 
 List<Map<String, dynamic>> _dedupeFamilyLocations(
     List<Map<String, dynamic>> raw) {
@@ -72,12 +68,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   /// 延后一帧再挂载高德原生视图，减轻「VM Service 尚未就绪就加载 native .so」导致的调试连接失败；真机同样更稳。
   bool _mapSurfaceReady = false;
 
-  CoordPoint? _toGcjFromMap(Map<String, dynamic>? m) {
+  /// 接口与存储均为 GCJ-02，与高德地图一致，不做坐标转换。
+  LatLng? _latLngFromMap(Map<String, dynamic>? m) {
     if (m == null) return null;
     final lat = (m['latitude'] as num?)?.toDouble();
     final lng = (m['longitude'] as num?)?.toDouble();
     if (lat == null || lng == null) return null;
-    return wgs84ToGcj02(latitude: lat, longitude: lng);
+    return LatLng(lat, lng);
   }
 
   @override
@@ -171,10 +168,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final m = _myLocation;
     final ctrl = _mapController;
     if (m == null || ctrl == null) return;
-    final gcj = _toGcjFromMap(m);
-    if (gcj == null) return;
+    final ll = _latLngFromMap(m);
+    if (ll == null) return;
     ctrl.moveCamera(
-      CameraUpdate.newLatLngZoom(LatLng(gcj.latitude, gcj.longitude), 16),
+      CameraUpdate.newLatLngZoom(ll, 16),
     );
   }
 
@@ -196,20 +193,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _focusMember(Map<String, dynamic> l) {
-    final gcj = _toGcjFromMap(l);
+    final ll = _latLngFromMap(l);
     final ctrl = _mapController;
-    if (gcj == null || ctrl == null) return;
+    if (ll == null || ctrl == null) return;
     ctrl.moveCamera(
-      CameraUpdate.newLatLngZoom(LatLng(gcj.latitude, gcj.longitude), 16),
+      CameraUpdate.newLatLngZoom(ll, 16),
     );
   }
 
   Future<void> _openAmapNavigation(Map<String, dynamic> l) async {
-    final gcj = _toGcjFromMap(l);
-    if (gcj == null) {
+    final ll = _latLngFromMap(l);
+    if (ll == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('该家人暂无有效定位，无法导航')),
+        const SnackBar(content: Text('该家人暂无有效定位，无法规划路线')),
       );
       return;
     }
@@ -219,12 +216,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         : '家人';
     final encodedName = Uri.encodeComponent(name);
 
+    // 路径规划（非导航）：见高德「路径规划-Android」amapuri://route/plan/
     final appUri = Uri.parse(
-      'androidamap://navi?sourceApplication=location_sharing'
-      '&lat=${gcj.latitude}&lon=${gcj.longitude}&dev=0&style=2&poiname=$encodedName',
+      'amapuri://route/plan/?sourceApplication=location_sharing'
+      '&dlat=${ll.latitude}&dlon=${ll.longitude}&dname=$encodedName&dev=0&t=0',
     );
+    // Web 端同接口为路径规划（起点空则移动端用当前位置）
     final webUri = Uri.parse(
-      'https://uri.amap.com/navigation?to=${gcj.longitude},${gcj.latitude},$encodedName'
+      'https://uri.amap.com/navigation?to=${ll.longitude},${ll.latitude},$encodedName'
       '&mode=car&src=location_sharing&coordinate=gaode&callnative=1',
     );
 
@@ -248,10 +247,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   CameraPosition _initialCameraPosition() {
     final m = _myLocation;
     if (m != null) {
-      final gcj = _toGcjFromMap(m);
-      if (gcj != null) {
+      final ll = _latLngFromMap(m);
+      if (ll != null) {
         return CameraPosition(
-          target: LatLng(gcj.latitude, gcj.longitude),
+          target: ll,
           zoom: 16,
         );
       }
@@ -271,11 +270,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final markers = <Marker>{};
     final mine = _myLocation;
     if (mine != null) {
-      final gcj = _toGcjFromMap(mine);
-      if (gcj != null) {
+      final ll = _latLngFromMap(mine);
+      if (ll != null) {
         markers.add(
           Marker(
-            position: LatLng(gcj.latitude, gcj.longitude),
+            position: ll,
             icon: _dotMarkerIcon,
             anchor: const Offset(0.5, 0.5),
             infoWindow: const InfoWindow(title: '我', snippet: '当前位置'),
@@ -285,12 +284,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
 
     for (final l in _familyLocations) {
-      final gcj = _toGcjFromMap(l);
-      if (gcj == null) continue;
+      final ll = _latLngFromMap(l);
+      if (ll == null) continue;
       final name = l['nickname']?.toString() ?? '家人';
       markers.add(
         Marker(
-          position: LatLng(gcj.latitude, gcj.longitude),
+          position: ll,
           icon: _dotMarkerIcon,
           anchor: const Offset(0.5, 0.5),
           infoWindow: InfoWindow(title: name),
@@ -641,7 +640,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       )
                     : AMapWidget(
                         privacyStatement: _amapPrivacy,
-                        apiKey: const AMapApiKey(androidKey: _kAmapAndroidKey),
+                        apiKey: const AMapApiKey(
+                          androidKey: AmapConfig.androidKey,
+                          iosKey: AmapConfig.iosKey,
+                        ),
                         initialCameraPosition: _initialCameraPosition(),
                         myLocationStyleOptions: MyLocationStyleOptions(true),
                         markers: _buildMarkers(),

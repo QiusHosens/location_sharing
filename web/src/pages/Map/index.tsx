@@ -15,7 +15,6 @@ import { getGroups } from '@/api/user';
 import { useAuthStore } from '@/store/auth';
 import { connectMqtt, disconnectMqtt } from '@/mqtt/client';
 import { loadAmapScript } from '@/utils/amap';
-import { wgs84ToGcj02 } from '@/utils/coord';
 import { resolveMediaUrl } from '@/utils/mediaUrl';
 
 type LocRow = {
@@ -44,9 +43,9 @@ function dedupeLatest(locs: LocRow[]): LocRow[] {
   return Array.from(map.values());
 }
 
+/** 与后端一致存 GCJ-02，直接用于高德 JS API / uri.amap */
 function openAmapNavigation(lng: number, lat: number, name: string) {
-  const gcj = wgs84ToGcj02(lat, lng);
-  const to = `${gcj.longitude},${gcj.latitude},${encodeURIComponent(name)}`;
+  const to = `${lng},${lat},${encodeURIComponent(name)}`;
   window.open(`https://uri.amap.com/navigation?to=${to}&mode=car&src=location-sharing&coordinate=gaode`, '_blank');
 }
 
@@ -79,17 +78,16 @@ export default function MapPage() {
   const updateMarker = useCallback(
     (uid: string, lng: number, lat: number, label: string, isSelf: boolean) => {
       if (!mapInstance.current || !window.AMap) return;
-      const gcj = wgs84ToGcj02(lat, lng);
       const letter = (label && label[0]) || '?';
       const color = uid === userId ? brandBlue : '#22C55E';
       const content = buildMarkerContent(label, letter, color, isSelf);
       const existing = markersRef.current.get(uid);
       if (existing) {
-        existing.setPosition([gcj.longitude, gcj.latitude]);
+        existing.setPosition([lng, lat]);
         existing.setContent(content);
       } else {
         const marker = new window.AMap.Marker({
-          position: [gcj.longitude, gcj.latitude],
+          position: [lng, lat],
           content,
           anchor: new window.AMap.Pixel(-26, -70),
           offset: new window.AMap.Pixel(0, 0),
@@ -117,8 +115,7 @@ export default function MapPage() {
         };
         collected.push(row);
         updateMarker(userId, myLoc.longitude, myLoc.latitude, '我', true);
-        const gcj = wgs84ToGcj02(myLoc.latitude, myLoc.longitude);
-        mapInstance.current?.setCenter([gcj.longitude, gcj.latitude]);
+        mapInstance.current?.setCenter([myLoc.longitude, myLoc.latitude]);
       }
       const groups = await getGroups();
       for (const g of groups || []) {
@@ -193,8 +190,7 @@ export default function MapPage() {
 
   const focusMember = useCallback((m: LocRow) => {
     if (!mapInstance.current) return;
-    const gcj = wgs84ToGcj02(m.latitude, m.longitude);
-    mapInstance.current.setZoomAndCenter?.(16, [gcj.longitude, gcj.latitude]);
+    mapInstance.current.setZoomAndCenter?.(16, [m.longitude, m.latitude]);
   }, []);
 
   const panelList = useMemo(() => {
