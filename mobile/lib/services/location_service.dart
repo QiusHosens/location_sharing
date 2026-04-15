@@ -1,131 +1,30 @@
 import 'dart:async';
-import 'dart:math' as math;
 
-import 'package:amap_flutter_location/amap_flutter_location.dart';
-import 'package:amap_flutter_location/amap_location_option.dart';
-import 'package:battery_plus/battery_plus.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart' show TargetPlatform;
+import 'package:battery_plus/battery_plus.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../api/location_api.dart';
 import '../app_logger.dart';
 
+/// 与 [AndroidSettings.distanceFilter] 一致：位移不足该米数时系统不向 stream 投递新点。
+const int _kMinMoveMetersInt = 5;
 const double _kMinMoveMeters = 5.0;
-
-const Duration _kOneShotTimeout = Duration(seconds: 20);
-
-/// 存取与高德 SDK 一致为 GCJ-02。
-class LocationSnapshot {
-  const LocationSnapshot({
-    required this.latitude,
-    required this.longitude,
-    this.altitude,
-    this.speed,
-    this.bearing,
-    this.accuracy,
-  });
-
-  final double latitude;
-  final double longitude;
-  final double? altitude;
-  final double? speed;
-  final double? bearing;
-  final double? accuracy;
-}
-
-bool _useAmapLocation() {
-  if (kIsWeb) return false;
-  return defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS;
-}
-
-double _distanceMeters(
-  double lat1,
-  double lon1,
-  double lat2,
-  double lon2,
-) {
-  const earthRadius = 6371000.0;
-  final dLat = _rad(lat2 - lat1);
-  final dLon = _rad(lon2 - lon1);
-  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-      math.cos(_rad(lat1)) *
-          math.cos(_rad(lat2)) *
-          math.sin(dLon / 2) *
-          math.sin(dLon / 2);
-  final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-  return earthRadius * c;
-}
-
-double _rad(double d) => d * math.pi / 180.0;
-
-double? _toDouble(Object? v) {
-  if (v == null) return null;
-  if (v is double) return v;
-  if (v is int) return v.toDouble();
-  if (v is num) return v.toDouble();
-  return null;
-}
-
-LocationSnapshot? _snapshotFromAmapMap(Map<String, Object> e) {
-  if (e.containsKey('errorCode')) return null;
-  final rawLat = _toDouble(e['latitude']);
-  final rawLon = _toDouble(e['longitude']);
-  if (rawLat == null || rawLon == null) return null;
-  return LocationSnapshot(
-    latitude: rawLat,
-    longitude: rawLon,
-    altitude: _toDouble(e['altitude']),
-    speed: _toDouble(e['speed']),
-    bearing: _toDouble(e['bearing']),
-    accuracy: _toDouble(e['accuracy']),
-  );
-}
-
-AMapLocationOption _trackingOptions() {
-  final opt = AMapLocationOption(
-    needAddress: false,
-    onceLocation: false,
-    locationMode: AMapLocationMode.Hight_Accuracy,
-    locationInterval: 4000,
-    geoLanguage: GeoLanguage.DEFAULT,
-    pausesLocationUpdatesAutomatically: false,
-    desiredAccuracy: DesiredAccuracy.Best,
-  );
-  if (defaultTargetPlatform == TargetPlatform.iOS) {
-    opt.distanceFilter = _kMinMoveMeters;
-  }
-  return opt;
-}
-
-AMapLocationOption _oneShotOptions() {
-  final opt = AMapLocationOption(
-    needAddress: false,
-    onceLocation: true,
-    locationMode: AMapLocationMode.Hight_Accuracy,
-    locationInterval: 1000,
-    geoLanguage: GeoLanguage.DEFAULT,
-    pausesLocationUpdatesAutomatically: false,
-    desiredAccuracy: DesiredAccuracy.Best,
-  );
-  if (defaultTargetPlatform == TargetPlatform.iOS) {
-    opt.distanceFilter = -1;
-  }
-  return opt;
-}
 
 class LocationService {
   final LocationApi _api = LocationApi();
   final Battery _battery = Battery();
-
-  AMapFlutterLocation? _trackingPlugin;
-  StreamSubscription<Map<String, Object>>? _subscription;
-  LocationSnapshot? _lastUploaded;
-  LocationSnapshot? _lastUiEmitted;
+  StreamSubscription<Position>? _subscription;
+  Position? _lastUploaded;
 
   /// 前台 + 申请「始终允许」以便后台持续定位（Android 10+）
   Future<bool> requestPermission() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return false;
+
     var base = await Permission.location.request();
     if (!base.isGranted) return false;
 
@@ -141,59 +40,46 @@ class LocationService {
     return true;
   }
 
-  Future<LocationSnapshot?> _oneShotPosition() async {
-    if (!_useAmapLocation()) return null;
-
-    final plugin = AMapFlutterLocation();
-    final completer = Completer<LocationSnapshot?>();
-
-    late final StreamSubscription<Map<String, Object>> sub;
-    sub = plugin.onLocationChanged().listen((Map<String, Object> e) {
-      final snap = _snapshotFromAmapMap(e);
-      if (snap != null) {
-        if (!completer.isCompleted) completer.complete(snap);
-      } else if (e.containsKey('errorCode')) {
-        if (!completer.isCompleted) completer.complete(null);
-      }
-    });
-
-    plugin.setLocationOption(_oneShotOptions());
-    plugin.startLocation();
-
-    LocationSnapshot? result;
-    try {
-      result = await completer.future.timeout(
-        _kOneShotTimeout,
-        onTimeout: () => null,
+  LocationSettings _locationSettings() {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      // Debug 下不启前台服务通知，避免部分模拟器 / Android 15+ 上 FGS 与调试器冲突导致进程退出
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: _kMinMoveMetersInt,
+        foregroundNotificationConfig: kDebugMode
+            ? null
+            : const ForegroundNotificationConfig(
+                notificationTitle: '定位共享',
+                notificationText: '正在后台持续定位并上传位置',
+                notificationChannelName: '定位共享',
+                enableWakeLock: true,
+              ),
       );
-    } finally {
-      await sub.cancel();
-      plugin.stopLocation();
-      plugin.destroy();
     }
-    return result;
+    return const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: _kMinMoveMetersInt,
+    );
   }
 
-  Future<LocationSnapshot?> getCurrentPosition() async {
-    if (!_useAmapLocation()) return null;
+  Future<Position?> getCurrentPosition() async {
     if (!await requestPermission()) return null;
-    return _oneShotPosition();
+    return Geolocator.getCurrentPosition(locationSettings: _locationSettings());
   }
 
-  /// 连续定位：单次结果先上传（与原先 Geolocator 首次 [getCurrentPosition] 一致），
-  /// 再由流更新界面；位移不足 [_kMinMoveMeters] 时不上传、不刷新 UI（iOS 可叠加 SDK distanceFilter）。
-  Future<bool> startTracking({Function(LocationSnapshot)? onLocation}) async {
-    if (!_useAmapLocation()) return false;
+  /// 位移不足 [_kMinMoveMeters] 时 [Geolocator.getPositionStream] 不回调；
+  /// 上传仅在相对「上次成功上传」位移 ≥ [_kMinMoveMeters] 时执行（含首次无基准点的一次上传）。
+  Future<bool> startTracking({Function(Position)? onLocation}) async {
     if (!await requestPermission()) return false;
 
-    await stopTracking();
-
+    _subscription?.cancel();
     _lastUploaded = null;
-    _lastUiEmitted = null;
 
-    Future<void> maybeUpload(LocationSnapshot pos) async {
+    final settings = _locationSettings();
+
+    Future<void> maybeUpload(Position pos) async {
       if (_lastUploaded != null) {
-        final d = _distanceMeters(
+        final d = Geolocator.distanceBetween(
           _lastUploaded!.latitude,
           _lastUploaded!.longitude,
           pos.latitude,
@@ -211,9 +97,9 @@ class LocationService {
           latitude: pos.latitude,
           altitude: pos.altitude,
           speed: pos.speed,
-          bearing: pos.bearing,
+          bearing: pos.heading,
           accuracy: pos.accuracy,
-          source: 'amap',
+          source: 'gps',
           batteryLevel: batt,
         );
         _lastUploaded = pos;
@@ -222,55 +108,27 @@ class LocationService {
       }
     }
 
+    _subscription = Geolocator.getPositionStream(locationSettings: settings)
+        .listen((position) {
+      onLocation?.call(position);
+      unawaited(maybeUpload(position));
+    });
+
+    // 首次单点仅上传（相对无「上次上传」视为有变化）；界面上的 onLocation 仅由 stream 在位移≥5m 时触发
     try {
-      final first = await _oneShotPosition();
-      if (first != null) {
-        await maybeUpload(first);
-      }
+      final first =
+          await Geolocator.getCurrentPosition(locationSettings: settings);
+      await maybeUpload(first);
     } catch (e, st) {
       appLogger.w('首次定位失败', error: e, stackTrace: st);
     }
 
-    _trackingPlugin = AMapFlutterLocation();
-    _trackingPlugin!.setLocationOption(_trackingOptions());
-
-    void handleEvent(Map<String, Object> e) {
-      final snap = _snapshotFromAmapMap(e);
-      if (snap == null) return;
-
-      if (_lastUiEmitted == null) {
-        _lastUiEmitted = snap;
-        onLocation?.call(snap);
-        unawaited(maybeUpload(snap));
-        return;
-      }
-
-      final moved = _distanceMeters(
-        _lastUiEmitted!.latitude,
-        _lastUiEmitted!.longitude,
-        snap.latitude,
-        snap.longitude,
-      );
-      if (moved < _kMinMoveMeters) return;
-
-      _lastUiEmitted = snap;
-      onLocation?.call(snap);
-      unawaited(maybeUpload(snap));
-    }
-
-    _subscription = _trackingPlugin!.onLocationChanged().listen(handleEvent);
-    _trackingPlugin!.startLocation();
-
     return true;
   }
 
-  Future<void> stopTracking() async {
-    await _subscription?.cancel();
+  void stopTracking() {
+    _subscription?.cancel();
     _subscription = null;
-    _trackingPlugin?.stopLocation();
-    _trackingPlugin?.destroy();
-    _trackingPlugin = null;
     _lastUploaded = null;
-    _lastUiEmitted = null;
   }
 }

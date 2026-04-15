@@ -5,13 +5,16 @@ import 'package:amap_flutter_map/amap_flutter_map.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 
-import '../amap_config.dart';
 import '../api/location_api.dart';
+import '../utils/coord_transform.dart';
+
 const AMapPrivacyStatement _amapPrivacy = AMapPrivacyStatement(
   hasContains: true,
   hasShow: true,
   hasAgree: true,
 );
+
+const String _kAmapAndroidKey = '75499ac31c1dba8d9ffebc451f5332d3';
 
 /// 在地图上展示某用户某时段内的全部轨迹点（折线）
 class TrajectoryDetailScreen extends StatefulWidget {
@@ -38,13 +41,12 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
   bool _loading = true;
   String? _error;
 
-  /// 轨迹点与存储均为 GCJ-02。
-  LatLng? _latLngFromPoint(dynamic p) {
+  CoordPoint? _toGcjFromTrajectory(dynamic p) {
     if (p is! Map) return null;
     final lat = (p['latitude'] as num?)?.toDouble();
     final lng = (p['longitude'] as num?)?.toDouble();
     if (lat == null || lng == null) return null;
-    return LatLng(lat, lng);
+    return wgs84ToGcj02(latitude: lat, longitude: lng);
   }
 
   @override
@@ -83,16 +85,20 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
     if (_points.isEmpty) {
       return const CameraPosition(target: LatLng(39.909187, 116.397451), zoom: 10);
     }
-    final ll = _latLngFromPoint(_points.first);
-    if (ll == null) {
+    final gcj = _toGcjFromTrajectory(_points.first);
+    if (gcj == null) {
       return const CameraPosition(target: LatLng(39.909187, 116.397451), zoom: 10);
     }
-    return CameraPosition(target: ll, zoom: 15);
+    return CameraPosition(target: LatLng(gcj.latitude, gcj.longitude), zoom: 15);
   }
 
   Set<Polyline> _polylines() {
     if (_points.length < 2) return {};
-    final pts = _points.map(_latLngFromPoint).whereType<LatLng>().toList();
+    final pts = _points
+        .map(_toGcjFromTrajectory)
+        .whereType<CoordPoint>()
+        .map((p) => LatLng(p.latitude, p.longitude))
+        .toList();
     if (pts.length < 2) return {};
     return {
       Polyline(
@@ -106,15 +112,15 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
   void _fitMap(AMapController c) {
     if (_points.isEmpty) return;
     if (_points.length == 1) {
-      final ll = _latLngFromPoint(_points.first);
-      if (ll == null) return;
-      c.moveCamera(CameraUpdate.newLatLngZoom(ll, 16));
+      final gcj = _toGcjFromTrajectory(_points.first);
+      if (gcj == null) return;
+      c.moveCamera(CameraUpdate.newLatLngZoom(LatLng(gcj.latitude, gcj.longitude), 16));
       return;
     }
-    final llPoints = _points.map(_latLngFromPoint).whereType<LatLng>().toList();
-    if (llPoints.isEmpty) return;
-    final lats = llPoints.map((p) => p.latitude).toList();
-    final lngs = llPoints.map((p) => p.longitude).toList();
+    final gcjPoints = _points.map(_toGcjFromTrajectory).whereType<CoordPoint>().toList();
+    if (gcjPoints.isEmpty) return;
+    final lats = gcjPoints.map((p) => p.latitude).toList();
+    final lngs = gcjPoints.map((p) => p.longitude).toList();
     final bounds = LatLngBounds(
       southwest: LatLng(lats.reduce(math.min), lngs.reduce(math.min)),
       northeast: LatLng(lats.reduce(math.max), lngs.reduce(math.max)),
@@ -134,10 +140,7 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
                   ? const Center(child: Text('当前平台不支持高德轨迹地图'))
                   : AMapWidget(
                       privacyStatement: _amapPrivacy,
-                      apiKey: const AMapApiKey(
-                      androidKey: AmapConfig.androidKey,
-                      iosKey: AmapConfig.iosKey,
-                    ),
+                      apiKey: const AMapApiKey(androidKey: _kAmapAndroidKey),
                       initialCameraPosition: _initialCamera(),
                       polylines: _polylines(),
                       onMapCreated: _fitMap,

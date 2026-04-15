@@ -30,7 +30,7 @@ dependencies:
   # 19.x 易与旧 AGP/D8 冲突；17.x 功能足够且 Android 侧要求更温和
   flutter_local_notifications: ^17.2.0
   # geolocator_android 5.x 依赖 Color.toARGB32()（Flutter 3.29+）；旧版 Flutter 请用 13.x
-  # geolocator: '>=13.0.0 <14.0.0'
+  geolocator: '>=13.0.0 <14.0.0'
   battery_plus: ^6.0.0
   image_picker: ^1.0.7
 
