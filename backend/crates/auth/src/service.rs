@@ -1,5 +1,6 @@
 use chrono::Utc;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use rand::{distr::Alphanumeric, RngExt};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -10,15 +11,26 @@ use common::models::User;
 pub struct AuthService;
 
 impl AuthService {
+    fn random_nickname() -> String {
+        let mut rng = rand::rng();
+        (&mut rng)
+            .sample_iter(&Alphanumeric)
+            .take(6)
+            .map(char::from)
+            .collect()
+    }
+
     pub async fn register_user(db: &PgPool, phone: &str, password: &str) -> Result<User, AppError> {
         let hash = bcrypt::hash(password, bcrypt::DEFAULT_COST)
             .map_err(|e| AppError::Internal(e.into()))?;
+        let nickname = Self::random_nickname();
 
         let res = sqlx::query_as::<_, User>(
-            "INSERT INTO users (phone, password_hash) VALUES ($1, $2) RETURNING *",
+            "INSERT INTO users (phone, password_hash, nickname) VALUES ($1, $2, $3) RETURNING *",
         )
         .bind(phone)
         .bind(&hash)
+        .bind(&nickname)
         .fetch_one(db)
         .await;
 

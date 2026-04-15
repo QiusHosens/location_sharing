@@ -21,8 +21,10 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
 
   List<dynamic> _groups = [];
   List<dynamic> _invitations = [];
+
   /// `/sharing` 列表，用于判断 owner→viewer 是否共享
   List<dynamic> _sharingList = [];
+
   /// 家人最新定位里的电量（来自 `getFamilyLocations`）
   final Map<String, int?> _batteryByUserId = {};
 
@@ -75,7 +77,9 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     if (me == null) return false;
     for (final s in _sharingList) {
       if (s is! Map) continue;
-      if (s['owner_id']?.toString() != me || s['viewer_id']?.toString() != viewerId) continue;
+      if (s['owner_id']?.toString() != me ||
+          s['viewer_id']?.toString() != viewerId)
+        continue;
       final status = s['status']?.toString() ?? '';
       final paused = s['is_paused'] == true;
       return status == 'accepted' && !paused;
@@ -90,19 +94,45 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
       await _load();
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('共享设置失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('共享设置失败')));
     }
   }
 
   Future<void> _callPhone(String phone) async {
     final t = phone.trim();
     if (t.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('拨打电话'),
+        content: Text('确认拨打 $t ？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: _accentBlue),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('拨打'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
     final uri = Uri(scheme: 'tel', path: t);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+      return;
     }
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('当前设备不支持拨号')));
   }
 
   void _showCreateDialog() {
@@ -113,11 +143,17 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
         title: const Text('创建家庭组'),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: '名称', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: '名称',
+            border: OutlineInputBorder(),
+          ),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: _accentBlue),
             onPressed: () async {
@@ -149,12 +185,18 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
             TextField(
               controller: ctrl,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: '对方手机号', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: '对方手机号',
+                border: OutlineInputBorder(),
+              ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: _accentBlue),
             onPressed: () async {
@@ -165,14 +207,14 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                 if (!mounted) return;
                 await _load();
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('邀请已发送')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('邀请已发送')));
               } catch (_) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('发送失败')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('发送失败')));
               }
             },
             child: const Text('发送邀请'),
@@ -195,18 +237,28 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
             backgroundColor: Colors.blue.shade100,
             child: Text(
               letter.toUpperCase(),
-              style: TextStyle(color: Colors.blue.shade800, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: Colors.blue.shade800,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           const Expanded(
             child: Text(
               '家庭',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF111827),
+              ),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Color(0xFF111827)),
+            icon: const Icon(
+              Icons.notifications_outlined,
+              color: Color(0xFF111827),
+            ),
             tooltip: '通知',
             onPressed: () => context.go('/notifications'),
           ),
@@ -233,19 +285,31 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
               children: [
                 Text(
                   groupName,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF111827)),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '$memberCount 位成员',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: _accentBlue),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: _accentBlue,
+                  ),
                 ),
               ],
             ),
           ),
           TextButton.icon(
             onPressed: () => _showAddMemberDialog(groupId),
-            icon: const Icon(Icons.person_add_outlined, size: 20, color: _accentBlue),
+            icon: const Icon(
+              Icons.person_add_outlined,
+              size: 20,
+              color: _accentBlue,
+            ),
             label: const Text('邀请', style: TextStyle(color: _accentBlue)),
           ),
           if (isOwner)
@@ -270,7 +334,8 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
   List<Widget> _sliversForGroup(Map<String, dynamic> group, int groupIndex) {
     final gid = group['id']?.toString() ?? '';
     final groupName = group['name']?.toString() ?? '家庭组';
-    final members = (group['members'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final members =
+        (group['members'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final auth = ref.watch(authProvider);
     final myId = auth.userId;
     final others = myId == null
@@ -326,7 +391,11 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     ];
   }
 
-  static const _statusIcons = [Icons.home_rounded, Icons.school_rounded, Icons.park_rounded];
+  static const _statusIcons = [
+    Icons.home_rounded,
+    Icons.school_rounded,
+    Icons.park_rounded,
+  ];
 
   Widget _memberCard(Map<String, dynamic> m, int index) {
     final id = m['user_id']?.toString() ?? '';
@@ -364,14 +433,18 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: ColoredBox(
-                            color: shareOn ? Colors.blue.shade50 : Colors.grey.shade300,
+                            color: shareOn
+                                ? Colors.blue.shade50
+                                : Colors.grey.shade300,
                             child: Center(
                               child: Text(
                                 letter,
                                 style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w700,
-                                  color: shareOn ? Colors.blue.shade800 : Colors.grey.shade600,
+                                  color: shareOn
+                                      ? Colors.blue.shade800
+                                      : Colors.grey.shade600,
                                 ),
                               ),
                             ),
@@ -383,11 +456,16 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                         bottom: -2,
                         child: Container(
                           padding: const EdgeInsets.all(3),
-                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
                           child: Icon(
                             statusIcon,
                             size: 14,
-                            color: shareOn ? const Color(0xFF2E7D32) : Colors.grey,
+                            color: shareOn
+                                ? const Color(0xFF2E7D32)
+                                : Colors.grey,
                           ),
                         ),
                       ),
@@ -404,26 +482,39 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: shareOn ? const Color(0xFF111827) : Colors.grey.shade600,
+                          color: shareOn
+                              ? const Color(0xFF111827)
+                              : Colors.grey.shade600,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        shareOn ? '$roleLabel • $battLabel' : '$roleLabel • 已暂停共享',
-                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                        shareOn
+                            ? '$roleLabel • $battLabel'
+                            : '$roleLabel • 已暂停共享',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 Material(
-                  color: shareOn ? const Color(0xFFE8F5E9) : Colors.grey.shade200,
+                  color: shareOn
+                      ? const Color(0xFFE8F5E9)
+                      : Colors.grey.shade200,
                   shape: const CircleBorder(),
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: shareOn ? () => _callPhone(phone) : null,
                     child: Padding(
                       padding: const EdgeInsets.all(10),
-                      child: Icon(Icons.phone, color: shareOn ? const Color(0xFF2E7D32) : Colors.grey, size: 22),
+                      child: Icon(
+                        Icons.phone,
+                        color: shareOn ? const Color(0xFF2E7D32) : Colors.grey,
+                        size: 22,
+                      ),
                     ),
                   ),
                 ),
@@ -466,11 +557,16 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('待处理邀请', style: Theme.of(context).textTheme.titleSmall),
+                              Text(
+                                '待处理邀请',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
                               const SizedBox(height: 8),
                               ..._invitations.map((inv) {
-                                final name = inv['group_name']?.toString() ?? '';
-                                final who = inv['inviter_nickname']?.toString() ??
+                                final name =
+                                    inv['group_name']?.toString() ?? '';
+                                final who =
+                                    inv['inviter_nickname']?.toString() ??
                                     inv['inviter_phone']?.toString() ??
                                     '';
                                 final id = inv['id']?.toString() ?? '';
@@ -479,31 +575,47 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                                   child: Padding(
                                     padding: const EdgeInsets.all(12),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text('$who 邀请你加入「$name」'),
                                         const SizedBox(height: 8),
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
                                           children: [
                                             TextButton(
                                               onPressed: () async {
                                                 try {
-                                                  await _api.respondFamilyInvitation(id, false);
+                                                  await _api
+                                                      .respondFamilyInvitation(
+                                                        id,
+                                                        false,
+                                                      );
                                                   await _load();
                                                 } catch (_) {}
                                               },
                                               child: const Text('拒绝'),
                                             ),
                                             FilledButton(
-                                              style: FilledButton.styleFrom(backgroundColor: _accentBlue),
+                                              style: FilledButton.styleFrom(
+                                                backgroundColor: _accentBlue,
+                                              ),
                                               onPressed: () async {
                                                 try {
-                                                  await _api.respondFamilyInvitation(id, true);
+                                                  await _api
+                                                      .respondFamilyInvitation(
+                                                        id,
+                                                        true,
+                                                      );
                                                   await _load();
                                                   if (!mounted) return;
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(content: Text('已加入家庭组')),
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text('已加入家庭组'),
+                                                    ),
                                                   );
                                                 } catch (_) {}
                                               },
@@ -529,16 +641,26 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.groups_outlined, size: 72, color: Colors.grey.shade400),
+                                Icon(
+                                  Icons.groups_outlined,
+                                  size: 72,
+                                  color: Colors.grey.shade400,
+                                ),
                                 const SizedBox(height: 12),
                                 Text(
                                   '暂无家庭组',
-                                  style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 16,
+                                  ),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
                                   '创建家庭组，邀请家人加入',
-                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 14,
+                                  ),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -547,7 +669,10 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                         ),
                       ),
                     for (var gi = 0; gi < _groups.length; gi++)
-                      ..._sliversForGroup(_groups[gi] as Map<String, dynamic>, gi),
+                      ..._sliversForGroup(
+                        _groups[gi] as Map<String, dynamic>,
+                        gi,
+                      ),
                     const SliverToBoxAdapter(child: SizedBox(height: 88)),
                   ],
                 ),
@@ -562,10 +687,15 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                     backgroundColor: _accentBlue,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
                   ),
                   icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: const Text('创建家庭组', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  label: const Text(
+                    '创建家庭组',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
                   onPressed: _showCreateDialog,
                 ),
               ),

@@ -24,6 +24,7 @@ import {
 } from '@mui/icons-material';
 import { getTrajectoryDaySummary, getTrajectory } from '@/api/location';
 import { loadAmapScript } from '@/utils/amap';
+import { wgs84ToGcj02 } from '@/utils/coord';
 import dayjs from 'dayjs';
 import { brandBlue } from '@/theme';
 
@@ -99,7 +100,10 @@ export default function TrajectoryPage() {
     const map = new window.AMap.Map(mapRef.current, { zoom: 14, viewMode: '2D' });
     mapInstance.current = map;
     const path = detailPoints
-      .map((p: any) => [Number(p.longitude), Number(p.latitude)])
+      .map((p: any) => {
+        const gcj = wgs84ToGcj02(Number(p.latitude), Number(p.longitude));
+        return [gcj.longitude, gcj.latitude];
+      })
       .filter((x) => Number.isFinite(x[0]) && Number.isFinite(x[1]));
     if (!path.length) return;
     const polyline = new window.AMap.Polyline({

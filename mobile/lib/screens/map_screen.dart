@@ -1,29 +1,23 @@
-import 'dart:ui' as ui;
+import 'dart:convert';
 
-import 'package:amap_flutter_base/amap_flutter_base.dart';
-import 'package:amap_flutter_map/amap_flutter_map.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
-import '../amap_config.dart';
+import '../api/config_api.dart';
+import '../api/client.dart';
 import '../api/location_api.dart';
 import '../api/user_api.dart';
 import '../providers/auth_provider.dart';
 import '../services/location_service.dart';
 import '../services/mqtt_service.dart';
-/// 高德 SDK 8.1+ 要求首次展示地图前完成隐私合规；三者为 false 会白屏。
-/// 正式上架前应在隐私弹窗取得用户同意后再设为 true。
-const AMapPrivacyStatement _amapPrivacy = AMapPrivacyStatement(
-  hasContains: true,
-  hasShow: true,
-  hasAgree: true,
-);
+import '../utils/coord_transform.dart';
 
 List<Map<String, dynamic>> _dedupeFamilyLocations(
-    List<Map<String, dynamic>> raw) {
+  List<Map<String, dynamic>> raw,
+) {
   final byId = <String, Map<String, dynamic>>{};
   for (final l in raw) {
     final id = l['user_id']?.toString() ?? '${l['latitude']}_${l['longitude']}';
@@ -37,8 +31,11 @@ List<Map<String, dynamic>> _dedupeFamilyLocations(
     if (t2.compareTo(t1) > 0) byId[id] = l;
   }
   final list = byId.values.toList();
-  list.sort((a, b) => (a['nickname']?.toString() ?? '')
-      .compareTo(b['nickname']?.toString() ?? ''));
+  list.sort(
+    (a, b) => (a['nickname']?.toString() ?? '').compareTo(
+      b['nickname']?.toString() ?? '',
+    ),
+  );
   return list;
 }
 
@@ -56,43 +53,131 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
+  final ApiClient _apiClient = ApiClient();
+  final ConfigApi _configApi = ConfigApi();
   final LocationService _locationService = LocationService();
   final MqttService _mqttService = MqttService();
   final LocationApi _locationApi = LocationApi();
   final UserApi _userApi = UserApi();
   List<Map<String, dynamic>> _familyLocations = [];
   Map<String, dynamic>? _myLocation;
-  AMapController? _mapController;
-  BitmapDescriptor _dotMarkerIcon =
-      BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
-  /// 延后一帧再挂载高德原生视图，减轻「VM Service 尚未就绪就加载 native .so」导致的调试连接失败；真机同样更稳。
-  bool _mapSurfaceReady = false;
+  WebViewController? _webViewController;
+  bool _mapReady = false;
+  bool _mapLoading = true;
+  String? _mapError;
 
-  /// 接口与存储均为 GCJ-02，与高德地图一致，不做坐标转换。
-  LatLng? _latLngFromMap(Map<String, dynamic>? m) {
+  CoordPoint? _toGcjFromMap(Map<String, dynamic>? m) {
     if (m == null) return null;
     final lat = (m['latitude'] as num?)?.toDouble();
     final lng = (m['longitude'] as num?)?.toDouble();
     if (lat == null || lng == null) return null;
-    return LatLng(lat, lng);
+    return wgs84ToGcj02(latitude: lat, longitude: lng);
   }
 
   @override
   void initState() {
     super.initState();
-    _prepareDotMarkerIcon();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future<void>.delayed(const Duration(milliseconds: 400), () {
-        if (mounted) setState(() => _mapSurfaceReady = true);
-      });
-    });
+    _initMapWebView();
     _init();
+  }
+
+  Future<void> _initMapWebView() async {
+    setState(() {
+      _mapLoading = true;
+      _mapError = null;
+    });
+    try {
+      final cfg = await _configApi.getMapConfig();
+      final webKey = cfg.webKey.trim();
+      if (webKey.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _mapLoading = false;
+          _mapError = '高德地图 key 未配置';
+        });
+        return;
+      }
+
+      final c = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.black)
+        ..addJavaScriptChannel(
+          'MapBridge',
+          onMessageReceived: (msg) {
+            final m = msg.message;
+            if (m == 'ready') {
+              if (!mounted) return;
+              setState(() {
+                _mapReady = true;
+                _mapLoading = false;
+              });
+              _syncMarkersToMap();
+              _moveCameraToMyLocation();
+            } else if (m.startsWith('error:')) {
+              if (!mounted) return;
+              setState(() {
+                _mapLoading = false;
+                _mapError = m.substring(6);
+              });
+            }
+          },
+        )
+        ..loadHtmlString(
+          _buildAmapHtml(
+            key: webKey,
+            securitySecret: cfg.webSecuritySecret.trim(),
+          ),
+        );
+      if (!mounted) return;
+      setState(() => _webViewController = c);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _mapLoading = false;
+        _mapError = '地图配置加载失败';
+      });
+    }
   }
 
   Future<void> _init() async {
     final auth = ref.read(authProvider);
     if (auth.userId != null) {
-      _mqttService.onLocationUpdate = (data) => setState(() {});
+      _mqttService.onLocationUpdate = (data) {
+        setState(() {
+          final uid = data['user_id']?.toString();
+          if (uid == null || uid.isEmpty) return;
+          final lng = (data['longitude'] as num?)?.toDouble();
+          final lat = (data['latitude'] as num?)?.toDouble();
+          if (lng == null || lat == null) return;
+          final isSelf = auth.userId == uid;
+          if (isSelf) {
+            _myLocation = {'longitude': lng, 'latitude': lat};
+            return;
+          }
+          final next = List<Map<String, dynamic>>.from(_familyLocations);
+          final idx = next.indexWhere((e) => e['user_id']?.toString() == uid);
+          final patch = <String, dynamic>{
+            'user_id': uid,
+            'longitude': lng,
+            'latitude': lat,
+            'nickname': data['nickname'],
+            'recorded_at': DateTime.now()
+                .toUtc()
+                .toIso8601String()
+                .replaceFirst('Z', ''),
+          };
+          if (idx >= 0) {
+            next[idx] = {...next[idx], ...patch};
+          } else {
+            next.add(patch);
+          }
+          _familyLocations = _dedupeFamilyLocations(next);
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _syncMarkersToMap();
+          _moveCameraToMyLocation();
+        });
+      };
       await _mqttService.connect(auth.userId!);
     }
     await _loadLocations();
@@ -113,8 +198,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         } catch (_) {}
       }
       setState(() => _familyLocations = _dedupeFamilyLocations(locs));
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _moveCameraToMyLocation());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _syncMarkersToMap();
+        _moveCameraToMyLocation();
+      });
     } catch (_) {}
   }
 
@@ -124,90 +211,119 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         setState(() {
           _myLocation = {'longitude': pos.longitude, 'latitude': pos.latitude};
         });
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _moveCameraToMyLocation());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _syncMarkersToMap();
+          _moveCameraToMyLocation();
+        });
       },
     );
   }
 
-  Future<void> _prepareDotMarkerIcon() async {
+  Future<void> _runMapJs(String script) async {
+    if (!_mapReady || _webViewController == null) return;
     try {
-      const size = 128.0;
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      final center = Offset(size / 2, size / 2);
+      await _webViewController!.runJavaScript(script);
+    } catch (_) {}
+  }
 
-      final outerPaint = Paint()..color = const Color(0x553E7FA5);
-      canvas.drawCircle(center, 48, outerPaint);
-
-      final middlePaint = Paint()..color = Colors.white;
-      canvas.drawCircle(center, 32, middlePaint);
-
-      final innerPaint = Paint()..color = const Color(0xFF0D66D0);
-      canvas.drawCircle(center, 24, innerPaint);
-
-      final image = await recorder.endRecording().toImage(size.toInt(), size.toInt());
-      final data = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (data == null) return;
-      final bytes = data.buffer.asUint8List();
-      if (!mounted) return;
-      setState(() {
-        _dotMarkerIcon = BitmapDescriptor.fromBytes(bytes);
+  List<Map<String, dynamic>> _buildMarkerPayload() {
+    final payload = <Map<String, dynamic>>[];
+    final mine = _toGcjFromMap(_myLocation);
+    if (mine != null) {
+      payload.add({
+        'id': '__self__',
+        'lat': mine.latitude,
+        'lng': mine.longitude,
+        'label': '我',
+        'isSelf': true,
+        'avatarUrl': null,
       });
-    } catch (_) {
-      // 失败时保留默认 marker，避免影响地图功能。
     }
+    for (final l in _familyLocations) {
+      final gcj = _toGcjFromMap(l);
+      if (gcj == null) continue;
+      final uid =
+          l['user_id']?.toString() ?? '${gcj.latitude}_${gcj.longitude}';
+      final label = (l['nickname']?.toString().trim().isNotEmpty ?? false)
+          ? l['nickname'].toString().trim()
+          : '家人';
+      payload.add({
+        'id': uid,
+        'lat': gcj.latitude,
+        'lng': gcj.longitude,
+        'label': label,
+        'isSelf': false,
+        'avatarUrl': _apiClient.resolveMediaUrl(l['avatar_url']?.toString()),
+      });
+    }
+    return payload;
   }
 
-  void _onMapCreated(AMapController controller) {
-    _mapController = controller;
-    _moveCameraToMyLocation();
+  void _syncMarkersToMap() {
+    final markersJson = jsonEncode(_buildMarkerPayload());
+    _runMapJs('window.LSMap && window.LSMap.setMarkers($markersJson);');
   }
 
-  void _moveCameraToMyLocation() {
+  void _moveCameraToMyLocation({bool keepZoomIfClose = false}) {
     final m = _myLocation;
-    final ctrl = _mapController;
-    if (m == null || ctrl == null) return;
-    final ll = _latLngFromMap(m);
-    if (ll == null) return;
-    ctrl.moveCamera(
-      CameraUpdate.newLatLngZoom(ll, 16),
+    if (m == null || !_mapReady) return;
+    final gcj = _toGcjFromMap(m);
+    if (gcj == null) return;
+    if (keepZoomIfClose) {
+      _runMapJs(
+        'window.LSMap && window.LSMap.moveToWithMinZoom(${gcj.longitude}, ${gcj.latitude}, 15, 16);',
+      );
+      return;
+    }
+    _runMapJs(
+      'window.LSMap && window.LSMap.moveTo(${gcj.longitude}, ${gcj.latitude}, 16);',
     );
   }
 
   Future<void> _locateNow() async {
-    final pos = await _locationService.getCurrentPosition();
+    final prev = _myLocation;
+    final pos = await _locationService.getLastKnownPosition();
     if (!mounted) return;
     if (pos == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('定位失败，请检查定位权限和系统定位开关')),
-      );
+      if (prev != null) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _moveCameraToMyLocation(),
+        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('未获取到最近定位，已回到上次定位位置')));
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('未获取到最近定位，请稍后再试')));
+      }
       return;
     }
 
     setState(() {
       _myLocation = {'longitude': pos.longitude, 'latitude': pos.latitude};
     });
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _moveCameraToMyLocation());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncMarkersToMap();
+      _moveCameraToMyLocation(keepZoomIfClose: true);
+    });
   }
 
   void _focusMember(Map<String, dynamic> l) {
-    final ll = _latLngFromMap(l);
-    final ctrl = _mapController;
-    if (ll == null || ctrl == null) return;
-    ctrl.moveCamera(
-      CameraUpdate.newLatLngZoom(ll, 16),
+    final gcj = _toGcjFromMap(l);
+    if (gcj == null || !_mapReady) return;
+    _runMapJs(
+      'window.LSMap && window.LSMap.moveTo(${gcj.longitude}, ${gcj.latitude}, 16);',
     );
   }
 
   Future<void> _openAmapNavigation(Map<String, dynamic> l) async {
-    final ll = _latLngFromMap(l);
-    if (ll == null) {
+    final gcj = _toGcjFromMap(l);
+    if (gcj == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('该家人暂无有效定位，无法规划路线')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('该家人暂无有效定位，无法导航')));
       return;
     }
 
@@ -216,14 +332,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         : '家人';
     final encodedName = Uri.encodeComponent(name);
 
-    // 路径规划（非导航）：见高德「路径规划-Android」amapuri://route/plan/
     final appUri = Uri.parse(
       'amapuri://route/plan/?sourceApplication=location_sharing'
-      '&dlat=${ll.latitude}&dlon=${ll.longitude}&dname=$encodedName&dev=0&t=0',
+      '&dlat=${gcj.latitude}&dlon=${gcj.longitude}&dname=$encodedName&dev=0&t=0',
     );
-    // Web 端同接口为路径规划（起点空则移动端用当前位置）
     final webUri = Uri.parse(
-      'https://uri.amap.com/navigation?to=${ll.longitude},${ll.latitude},$encodedName'
+      'https://uri.amap.com/navigation?to=${gcj.longitude},${gcj.latitude},$encodedName'
       '&mode=car&src=location_sharing&coordinate=gaode&callnative=1',
     );
 
@@ -239,93 +353,182 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
     if (launchedWeb || !mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('无法打开高德地图，请确认已安装')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('无法打开高德地图，请确认已安装')));
   }
 
-  CameraPosition _initialCameraPosition() {
-    final m = _myLocation;
-    if (m != null) {
-      final ll = _latLngFromMap(m);
-      if (ll != null) {
-        return CameraPosition(
-          target: ll,
-          zoom: 16,
-        );
+  String _buildAmapHtml({required String key, required String securitySecret}) {
+    final keyJs = jsonEncode(key);
+    final secJs = jsonEncode(securitySecret);
+    return '''
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <style>
+    html, body, #map { width:100%; height:100%; margin:0; padding:0; background:#1a1a1a; overflow:hidden; }
+    .amap-logo { display:none !important; }
+    .amap-copyright { display:none !important; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    (function() {
+      const key = $keyJs;
+      const securitySecret = $secJs;
+      const bridge = window.MapBridge;
+      const post = (msg) => bridge && bridge.postMessage && bridge.postMessage(msg);
+      if (securitySecret) {
+        window._AMapSecurityConfig = { securityJsCode: securitySecret };
       }
-    }
-    return const CameraPosition(
-      target: LatLng(39.909187, 116.397451),
-      zoom: 10,
-    );
+
+      let map = null;
+      const markers = new Map();
+      const escHtml = (s) => String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+      const markerHtml = (label, isSelf, avatarUrl) => {
+        const safe = escHtml(label || '家人');
+        const initial = safe ? safe.slice(0, 1) : '?';
+        if (isSelf) {
+          // 当前用户：同心圆定位样式
+          return '<div style="width:48px;height:48px;border-radius:50%;'
+            + 'display:flex;align-items:center;justify-content:center;'
+            + 'background:rgba(158,173,184,.45);">'
+            +   '<div style="width:28px;height:28px;border-radius:50%;'
+            +   'display:flex;align-items:center;justify-content:center;'
+            +   'background:#fff;">'
+            +     '<div style="width:20px;height:20px;border-radius:50%;background:#1565C0;"></div>'
+            +   '</div>'
+            + '</div>';
+        }
+
+        const hasAvatar = !!(avatarUrl && String(avatarUrl).trim());
+        const safeUrl = escHtml(avatarUrl || '');
+        const avatar = hasAvatar
+          ? '<img src="' + safeUrl + '" style="width:44px;height:44px;border-radius:50%;object-fit:cover;display:block;" '
+            + 'onerror="this.style.display=\\'none\\';this.nextElementSibling.style.display=\\'flex\\';" />'
+            + '<div style="display:none;width:44px;height:44px;border-radius:50%;background:#1565C0;'
+            + 'color:#fff;align-items:center;justify-content:center;font-weight:700;font-size:18px;">' + initial + '</div>'
+          : '<div style="width:44px;height:44px;border-radius:50%;background:#1565C0;'
+            + 'color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;">' + initial + '</div>';
+
+        // 家人：头像/首字 + 双层圆环
+        return '<div style="width:56px;height:56px;border-radius:50%;'
+          + 'display:flex;align-items:center;justify-content:center;'
+          + 'background:#1565C0;box-shadow:0 2px 8px rgba(0,0,0,.22);">'
+          +   '<div style="width:50px;height:50px;border-radius:50%;background:#fff;'
+          +   'display:flex;align-items:center;justify-content:center;">'
+          +     avatar
+          +   '</div>'
+          + '</div>';
+      };
+
+      window.LSMap = {
+        setMarkers(list) {
+          if (!map) return;
+          const items = Array.isArray(list) ? list : [];
+          const seen = new Set();
+          for (const m of items) {
+            const id = String(m.id || '');
+            const lng = Number(m.lng);
+            const lat = Number(m.lat);
+            if (!id || Number.isNaN(lng) || Number.isNaN(lat)) continue;
+            seen.add(id);
+            const content = markerHtml(
+              m.label || '家人',
+              !!m.isSelf,
+              m.avatarUrl || '',
+            );
+            if (markers.has(id)) {
+              const mk = markers.get(id);
+              mk.setPosition([lng, lat]);
+              mk.setContent(content);
+            } else {
+              const mk = new window.AMap.Marker({
+                position: [lng, lat],
+                content: content,
+                offset: !!m.isSelf
+                  ? new window.AMap.Pixel(-28, -28)
+                  : new window.AMap.Pixel(-28, -56),
+              });
+              map.add(mk);
+              markers.set(id, mk);
+            }
+          }
+          for (const [id, mk] of markers) {
+            if (!seen.has(id)) {
+              map.remove(mk);
+              markers.delete(id);
+            }
+          }
+        },
+        moveTo(lng, lat, zoom) {
+          if (!map) return;
+          map.setZoomAndCenter(Number(zoom || 16), [Number(lng), Number(lat)]);
+        },
+        moveToWithMinZoom(lng, lat, minZoom, targetZoom) {
+          if (!map) return;
+          const minZ = Number(minZoom || 15);
+          const targetZ = Number(targetZoom || 16);
+          const cur = Number(map.getZoom ? map.getZoom() : targetZ);
+          const nextZoom = cur < minZ ? targetZ : cur;
+          map.setZoomAndCenter(nextZoom, [Number(lng), Number(lat)]);
+        }
+      };
+
+      const script = document.createElement('script');
+      script.src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(key);
+      script.async = true;
+      script.onload = () => {
+        map = new window.AMap.Map('map', {
+          zoom: 15,
+          center: [116.397428, 39.90923],
+          viewMode: '2D'
+        });
+        map.on('complete', () => post('ready'));
+      };
+      script.onerror = () => post('error:高德脚本加载失败');
+      document.head.appendChild(script);
+    })();
+  </script>
+</body>
+</html>
+''';
   }
 
-  bool get _showAmap {
-    if (kIsWeb) return false;
-    return defaultTargetPlatform == TargetPlatform.android;
-  }
-
-  Set<Marker> _buildMarkers() {
-    final markers = <Marker>{};
-    final mine = _myLocation;
-    if (mine != null) {
-      final ll = _latLngFromMap(mine);
-      if (ll != null) {
-        markers.add(
-          Marker(
-            position: ll,
-            icon: _dotMarkerIcon,
-            anchor: const Offset(0.5, 0.5),
-            infoWindow: const InfoWindow(title: '我', snippet: '当前位置'),
-          ),
-        );
-      }
-    }
-
-    for (final l in _familyLocations) {
-      final ll = _latLngFromMap(l);
-      if (ll == null) continue;
-      final name = l['nickname']?.toString() ?? '家人';
-      markers.add(
-        Marker(
-          position: ll,
-          icon: _dotMarkerIcon,
-          anchor: const Offset(0.5, 0.5),
-          infoWindow: InfoWindow(title: name),
-        ),
+  Widget _buildMapLayer() {
+    final c = _webViewController;
+    if (_mapError != null) {
+      return Container(
+        color: const Color(0xFF1A1A1A),
+        alignment: Alignment.center,
+        child: Text(_mapError!, style: const TextStyle(color: Colors.white70)),
       );
     }
-    return markers;
-  }
-
-  Widget _buildUnsupportedMap() {
-    return Container(
-      color: Colors.grey[200],
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.map, size: 80, color: Colors.grey[400]),
-              const SizedBox(height: 8),
-              Text(
-                '地图未就绪',
-                style: TextStyle(color: Colors.grey[600], fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                defaultTargetPlatform == TargetPlatform.iOS
-                    ? '当前为 iOS，请配置 iosKey 后使用高德地图'
-                    : '当前平台不支持高德地图组件',
-                style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ],
+    if (c == null) {
+      return const ColoredBox(
+        color: Color(0xFF1A1A1A),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Stack(
+      children: [
+        Positioned.fill(child: WebViewWidget(controller: c)),
+        if (_mapLoading)
+          const Positioned.fill(
+            child: ColoredBox(
+              color: Color(0x33000000),
+              child: Center(child: CircularProgressIndicator()),
+            ),
           ),
-        ),
-      ),
+      ],
     );
   }
 
@@ -337,7 +540,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       elevation: 4,
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(28),
-      color: Colors.white.withOpacity(0.95),
+      color: Colors.white.withValues(alpha: 0.95),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Row(
@@ -348,7 +551,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               child: Text(
                 letter.toUpperCase(),
                 style: TextStyle(
-                    color: Colors.blue.shade800, fontWeight: FontWeight.w600),
+                  color: Colors.blue.shade800,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             const SizedBox(width: 10),
@@ -407,11 +612,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
           ),
-          const Icon(
-            Icons.turn_right,
-            color: Colors.white,
-            size: 16,
-          ),
+          const Icon(Icons.turn_right, color: Colors.white, size: 16),
         ],
       ),
     );
@@ -457,7 +658,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final letter = name.isNotEmpty ? name[0] : '?';
     final timeLabel = _fmtRecordedAt(l['recorded_at']?.toString());
     final rawBatt = l['battery_level'];
-    final batt = rawBatt is int ? rawBatt : (rawBatt is num ? rawBatt.toInt() : null);
+    final batt = rawBatt is int
+        ? rawBatt
+        : (rawBatt is num ? rawBatt.toInt() : null);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -484,8 +687,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         child: Text(
                           letter,
                           style: TextStyle(
-                              color: Colors.blue.shade700,
-                              fontWeight: FontWeight.w600),
+                            color: Colors.blue.shade700,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -493,20 +697,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(name,
-                                style: const TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w600)),
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Icon(Icons.place_outlined,
-                                    size: 16, color: Colors.grey[600]),
+                                Icon(
+                                  Icons.place_outlined,
+                                  size: 16,
+                                  color: Colors.grey[600],
+                                ),
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
                                     '上次更新 $timeLabel',
                                     style: TextStyle(
-                                        fontSize: 13, color: Colors.grey[700]),
+                                      fontSize: 13,
+                                      color: Colors.grey[700],
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -568,7 +781,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         const Text(
                           '家人状态',
                           style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w600),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const Spacer(),
                         IconButton(
@@ -621,43 +836,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final showMap = _showAmap;
-
     return Scaffold(
       extendBody: true,
       backgroundColor: Colors.black,
       body: Stack(
         clipBehavior: Clip.none,
         children: [
-          Positioned.fill(
-            child: showMap
-                ? (!_mapSurfaceReady
-                    ? Container(
-                        color: const Color(0xFF1A1A1A),
-                        child: const Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                    : AMapWidget(
-                        privacyStatement: _amapPrivacy,
-                        apiKey: const AMapApiKey(
-                          androidKey: AmapConfig.androidKey,
-                          iosKey: AmapConfig.iosKey,
-                        ),
-                        initialCameraPosition: _initialCameraPosition(),
-                        myLocationStyleOptions: MyLocationStyleOptions(true),
-                        markers: _buildMarkers(),
-                        onMapCreated: _onMapCreated,
-                      ))
-                : _buildUnsupportedMap(),
-          ),
+          Positioned.fill(child: _buildMapLayer()),
           SafeArea(
             bottom: false,
             child: Align(
               alignment: Alignment.topCenter,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 child: _buildTopBar(context),
               ),
             ),
