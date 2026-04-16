@@ -16,6 +16,10 @@ export interface GroupCreateBody {
   name: string;
 }
 
+export interface InviteMemberBody {
+  phone: string;
+}
+
 export interface SharingRespondBody {
   accept: boolean;
 }

@@ -1,3 +1,4 @@
+import { router } from '@kit.ArkUI';
 import { HttpClient } from '../api/HttpClient';
 import { appendDaySummaryQuery } from '../api/ApiPayloads';
 import { MainBottomNav } from '../components/MainBottomNav';
@@ -211,6 +212,17 @@ struct TrajectoryPage {
             .backgroundColor('#F9FAFB')
             .borderRadius(12)
             .margin({ bottom: 8 })
+            .onClick(() => {
+              router.pushUrl({
+                url: 'pages/TrajectoryDetailPage',
+                params: {
+                  title: maskPhone(u.phone) + ' ' + fmtHm(seg.start_time) + '-' + fmtHm(seg.end_time),
+                  user_id: u.user_id,
+                  start_time: seg.start_time,
+                  end_time: seg.end_time,
+                }
+              });
+            })
           })
         }
         .width('100%')

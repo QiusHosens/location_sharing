@@ -6,6 +6,7 @@
     "pages/FamilyPage",
     "pages/SharingPage",
     "pages/TrajectoryPage",
+    "pages/TrajectoryDetailPage",
     "pages/NotificationsPage",
     "pages/SettingsPage"
   ]

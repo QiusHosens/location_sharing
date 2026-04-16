@@ -1,0 +1,175 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <style>
+    html, body, #map { width:100%; height:100%; margin:0; padding:0; background:#0f172a; overflow:hidden; }
+    .amap-logo { display: none !important; }
+    .amap-copyright { display: none !important; }
+    .pin {
+      width: 52px;
+      height: 52px;
+      border-radius: 26px;
+      border: 3px solid #fff;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #fff;
+      background: #1877F2;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    .label {
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.92);
+      color: #111827;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.16);
+      white-space: nowrap;
+    }
+    .markerWrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transform: translateY(-6px);
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    (function () {
+      let map = null;
+      let loaded = false;
+      let meMarker = null;
+      let lastMePos = null;
+      const famMarkers = new Map();
+
+      function postReady() { try { MapBridge && MapBridge.onReady && MapBridge.onReady(); } catch (e) {} }
+      function postError(msg) { try { MapBridge && MapBridge.onError && MapBridge.onError(String(msg || 'error')); } catch (e) {} }
+
+      function ensureMap() {
+        if (!map) return false;
+        return true;
+      }
+
+      function markerContent(letter, label, color) {
+        const safeLetter = String(letter || '?').slice(0, 1).toUpperCase();
+        const safeLabel = String(label || '').slice(0, 24);
+        const safeColor = color || '#1877F2';
+        return `
+          <div class="markerWrap">
+            <div class="pin" style="background:${safeColor}">${safeLetter}</div>
+            ${safeLabel ? `<div class="label">${safeLabel}</div>` : ``}
+          </div>
+        `;
+      }
+
+      function setMe(payload) {
+        if (!ensureMap()) return;
+        if (!payload || !Number.isFinite(payload.lng) || !Number.isFinite(payload.lat)) return;
+        const pos = [payload.lng, payload.lat];
+        lastMePos = pos;
+        const html = markerContent(payload.letter, payload.label, payload.color);
+        if (!meMarker) {
+          meMarker = new window.AMap.Marker({
+            position: pos,
+            content: html,
+            anchor: 'bottom-center',
+          });
+          map.add(meMarker);
+        } else {
+          meMarker.setPosition(pos);
+          meMarker.setContent(html);
+        }
+      }
+
+      function setFamily(list) {
+        if (!ensureMap()) return;
+        const arr = Array.isArray(list) ? list : [];
+        const keep = new Set();
+        for (const item of arr) {
+          if (!item || !item.id) continue;
+          if (!Number.isFinite(item.lng) || !Number.isFinite(item.lat)) continue;
+          keep.add(item.id);
+          const pos = [item.lng, item.lat];
+          const html = markerContent(item.letter, item.label, item.color);
+          let mk = famMarkers.get(item.id);
+          if (!mk) {
+            mk = new window.AMap.Marker({
+              position: pos,
+              content: html,
+              anchor: 'bottom-center',
+            });
+            famMarkers.set(item.id, mk);
+            map.add(mk);
+          } else {
+            mk.setPosition(pos);
+            mk.setContent(html);
+          }
+        }
+        // remove old
+        for (const [id, mk] of famMarkers.entries()) {
+          if (!keep.has(id)) {
+            map.remove(mk);
+            famMarkers.delete(id);
+          }
+        }
+      }
+
+      function fitToAll() {
+        if (!ensureMap()) return;
+        const overlays = [];
+        if (meMarker) overlays.push(meMarker);
+        for (const mk of famMarkers.values()) overlays.push(mk);
+        if (overlays.length) map.setFitView(overlays, false, [64, 64, 280, 64], 17);
+      }
+
+      function centerToMe() {
+        if (!ensureMap()) return;
+        const pos = (meMarker && meMarker.getPosition && meMarker.getPosition()) || lastMePos;
+        if (!pos) return;
+        map.setZoomAndCenter(16, pos);
+      }
+
+      function init(key, secret) {
+        if (loaded) return;
+        if (!key) { postError('高德地图 key 为空'); return; }
+        if (secret) {
+          window._AMapSecurityConfig = { securityJsCode: secret };
+        }
+        const script = document.createElement('script');
+        script.src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(key);
+        script.async = true;
+        script.onload = function () {
+          loaded = true;
+          map = new window.AMap.Map('map', {
+            zoom: 14,
+            center: [116.397428, 39.90923],
+            viewMode: '2D',
+          });
+          map.on('complete', function () {
+            postReady();
+          });
+        };
+        script.onerror = function () { postError('高德脚本加载失败'); };
+        document.head.appendChild(script);
+      }
+
+      window.LSMap = {
+        init,
+        setMe,
+        setFamily,
+        fitToAll,
+        centerToMe,
+      };
+    })();
+  </script>
+</body>
+</html>
+

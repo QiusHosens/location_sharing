@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <style>
+    html, body, #map { width:100%; height:100%; margin:0; padding:0; background:#111; overflow:hidden; }
+    .amap-logo { display: none !important; }
+    .amap-copyright { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    (function () {
+      let map = null;
+      let polyline = null;
+      let startMarker = null;
+      let endMarker = null;
+      let loaded = false;
+      let pendingPoints = null;
+
+      function postReady() {
+        try { MapBridge && MapBridge.onReady && MapBridge.onReady(); } catch (e) {}
+      }
+      function postError(msg) {
+        try { MapBridge && MapBridge.onError && MapBridge.onError(String(msg || 'error')); } catch (e) {}
+      }
+      function clear() {
+        if (!map) return;
+        if (polyline) { map.remove(polyline); polyline = null; }
+        if (startMarker) { map.remove(startMarker); startMarker = null; }
+        if (endMarker) { map.remove(endMarker); endMarker = null; }
+      }
+
+      function setTrajectory(points) {
+        pendingPoints = points;
+        if (!loaded || !map) return;
+        const list = Array.isArray(points)
+          ? points.map((p) => [Number(p.lng), Number(p.lat)]).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))
+          : [];
+        clear();
+        if (list.length === 0) return;
+        if (list.length === 1) {
+          startMarker = new window.AMap.Marker({ position: list[0], title: '轨迹点' });
+          map.add(startMarker);
+          map.setZoomAndCenter(16, list[0]);
+          return;
+        }
+        polyline = new window.AMap.Polyline({
+          path: list,
+          strokeColor: '#1976D2',
+          strokeWeight: 6,
+          strokeOpacity: 0.85,
+          lineJoin: 'round',
+          lineCap: 'round'
+        });
+        startMarker = new window.AMap.Marker({ position: list[0], title: '起点' });
+        endMarker = new window.AMap.Marker({ position: list[list.length - 1], title: '终点' });
+        map.add([polyline, startMarker, endMarker]);
+        map.setFitView([polyline], false, [48, 48, 48, 48], 17);
+      }
+
+      function loadScript(key, secret) {
+        if (loaded) return;
+        if (!key) { postError('高德地图 key 为空'); return; }
+        if (secret) {
+          window._AMapSecurityConfig = { securityJsCode: secret };
+        }
+        const script = document.createElement('script');
+        script.src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(key);
+        script.async = true;
+        script.onload = function () {
+          loaded = true;
+          map = new window.AMap.Map('map', {
+            zoom: 14,
+            center: [116.397428, 39.90923],
+            viewMode: '2D'
+          });
+          map.on('complete', function () {
+            postReady();
+            if (pendingPoints) setTrajectory(pendingPoints);
+          });
+        };
+        script.onerror = function () { postError('高德脚本加载失败'); };
+        document.head.appendChild(script);
+      }
+
+      window.LSTrajectoryMap = {
+        init: loadScript,
+        setTrajectory: setTrajectory,
+      };
+    })();
+  </script>
+</body>
+</html>
+
