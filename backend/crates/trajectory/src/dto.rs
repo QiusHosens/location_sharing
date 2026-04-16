@@ -9,6 +9,19 @@ pub struct TrajectoryQuery {
     pub end_time: DateTime<Utc>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct OptimizedTrajectoryQuery {
+    pub user_id: Uuid,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    /// Douglas-Peucker 容差（米），默认 10
+    pub tolerance: Option<f64>,
+    /// 最大合理速度（m/s），超过视为漂移，默认 80
+    pub max_speed: Option<f64>,
+    /// 平滑半径，默认 1
+    pub smooth_radius: Option<usize>,
+}
+
 /// 单日汇总：YYYY-MM-DD（按 UTC 日历日切分，每 2 小时一段共 12 段）
 #[derive(Debug, Deserialize)]
 pub struct DaySummaryQuery {

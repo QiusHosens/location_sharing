@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use uuid::Uuid;
 
+use algorithm::trajectory::{self as traj_algo, OptimizeOptions, TrajectoryPt};
 use common::error::AppError;
 use crate::dto::*;
 
@@ -188,6 +189,53 @@ impl TrajectoryService {
         Ok(DayTrajectorySummaryResponse {
             date: date_str.to_string(),
             users,
+        })
+    }
+
+    /// 返回经过降噪 + 抽稀 + 平滑处理的优化轨迹（用于轨迹回放）
+    pub async fn query_optimized(
+        db: &PgPool,
+        viewer_id: Uuid,
+        target_user_id: Uuid,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+        opts: OptimizeOptions,
+    ) -> Result<TrajectoryResponse, AppError> {
+        let raw = Self::query(db, viewer_id, target_user_id, start_time, end_time).await?;
+
+        let input: Vec<TrajectoryPt> = raw
+            .points
+            .iter()
+            .map(|p| TrajectoryPt {
+                lng: p.longitude,
+                lat: p.latitude,
+                ts: p.recorded_at.timestamp() as f64,
+                altitude: p.altitude,
+                speed: p.speed,
+                accuracy: p.accuracy,
+            })
+            .collect();
+
+        let optimized = traj_algo::optimize(&input, &opts);
+
+        let points: Vec<TrajectoryPoint> = optimized
+            .into_iter()
+            .map(|p| TrajectoryPoint {
+                longitude: p.lng,
+                latitude: p.lat,
+                altitude: p.altitude,
+                speed: p.speed,
+                accuracy: p.accuracy,
+                recorded_at: DateTime::from_timestamp(p.ts as i64, 0)
+                    .unwrap_or(start_time),
+            })
+            .collect();
+
+        let total = points.len() as i64;
+        Ok(TrajectoryResponse {
+            user_id: target_user_id,
+            points,
+            total,
         })
     }
 }

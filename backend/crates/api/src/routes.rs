@@ -70,6 +70,7 @@ fn location_routes() -> Router<AppState> {
 fn trajectory_routes() -> Router<AppState> {
     Router::new()
         .route("/day-summary", get(trajectory::handlers::query_day_summary))
+        .route("/optimized", get(trajectory::handlers::query_optimized_trajectory))
         .route("/", get(trajectory::handlers::query_trajectory))
 }
 

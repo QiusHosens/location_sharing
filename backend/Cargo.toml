@@ -11,6 +11,7 @@ members = [
     "crates/sms",
     "crates/mqtt",
     "crates/common",
+    "crates/algorithm",
 ]
 
 [workspace.package]
@@ -56,3 +57,4 @@ notification = { path = "crates/notification" }
 admin = { path = "crates/admin" }
 sms = { path = "crates/sms" }
 mqtt-bridge = { path = "crates/mqtt" }
+algorithm = { path = "crates/algorithm" }
