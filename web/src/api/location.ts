@@ -20,6 +20,25 @@ export async function getTrajectory(userId: string, startTime: string, endTime: 
   return data.data;
 }
 
+export async function getOptimizedTrajectory(
+  userId: string,
+  startTime: string,
+  endTime: string,
+  opts?: { tolerance?: number; max_speed?: number; smooth_radius?: number }
+) {
+  const { data } = await api.get('/trajectory/optimized', {
+    params: {
+      user_id: userId,
+      start_time: startTime,
+      end_time: endTime,
+      tolerance: opts?.tolerance,
+      max_speed: opts?.max_speed,
+      smooth_radius: opts?.smooth_radius,
+    },
+  });
+  return data.data;
+}
+
 /** 指定日期的轨迹分段汇总（UTC 日、每 2 小时一段），date: YYYY-MM-DD */
 export async function getTrajectoryDaySummary(date: string) {
   const { data } = await api.get('/trajectory/day-summary', { params: { date } });

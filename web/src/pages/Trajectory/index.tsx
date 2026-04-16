@@ -12,8 +12,10 @@ import {
   Collapse,
   Avatar,
   Button,
+  Switch,
   Popover,
 } from '@mui/material';
+import { styled } from '@mui/material/styles';
 import {
   ChevronRight,
   Close,
@@ -22,7 +24,7 @@ import {
   FilterList,
   Place,
 } from '@mui/icons-material';
-import { getTrajectoryDaySummary, getTrajectory } from '@/api/location';
+import { getTrajectoryDaySummary, getOptimizedTrajectory, getTrajectory } from '@/api/location';
 import { loadAmapScript } from '@/utils/amap';
 import { wgs84ToGcj02 } from '@/utils/coord';
 import dayjs from 'dayjs';
@@ -32,6 +34,52 @@ type Segment = { start_time: string; end_time: string; point_count: number };
 type UserDay = { user_id: string; phone: string; nickname?: string; segments: Segment[] };
 
 const WEEK: string[] = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+const IOSSwitch = styled(Switch)(({ theme }) => ({
+  width: 46,
+  height: 28,
+  padding: 0,
+  '& .MuiSwitch-switchBase': {
+    padding: 0,
+    margin: 2,
+    transitionDuration: '200ms',
+    '&.Mui-checked': {
+      transform: 'translateX(18px)',
+      color: '#fff',
+      '& + .MuiSwitch-track': {
+        backgroundColor: brandBlue,
+        opacity: 1,
+        border: 0,
+      },
+      '&.Mui-disabled + .MuiSwitch-track': {
+        opacity: 0.5,
+      },
+    },
+    '&.Mui-focusVisible .MuiSwitch-thumb': {
+      border: '6px solid #fff',
+    },
+    '&.Mui-disabled .MuiSwitch-thumb': {
+      color: theme.palette.mode === 'light' ? theme.palette.grey[100] : theme.palette.grey[600],
+    },
+    '&.Mui-disabled + .MuiSwitch-track': {
+      opacity: theme.palette.mode === 'light' ? 0.35 : 0.25,
+    },
+  },
+  '& .MuiSwitch-thumb': {
+    boxSizing: 'border-box',
+    width: 24,
+    height: 24,
+    boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+  },
+  '& .MuiSwitch-track': {
+    borderRadius: 28 / 2,
+    backgroundColor: theme.palette.mode === 'light' ? '#E5E7EB' : '#3F3F46',
+    opacity: 1,
+    transition: theme.transitions.create(['background-color'], {
+      duration: 200,
+    }),
+  },
+}));
 
 function maskPhone(p: string) {
   const s = (p || '').replace(/\s/g, '');
@@ -53,7 +101,11 @@ export default function TrajectoryPage() {
   const [detailTitle, setDetailTitle] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailPoints, setDetailPoints] = useState<any[]>([]);
+  const [detailUseOptimized, setDetailUseOptimized] = useState(true);
   const [monthAnchor, setMonthAnchor] = useState<HTMLElement | null>(null);
+
+  const [detailUser, setDetailUser] = useState<UserDay | null>(null);
+  const [detailSegment, setDetailSegment] = useState<Segment | null>(null);
 
   const dayCount = month.daysInMonth();
   const daysArr = Array.from({ length: dayCount }, (_, i) => i + 1);
@@ -127,6 +179,9 @@ export default function TrajectoryPage() {
   }, [detailOpen, detailLoading, detailPoints]);
 
   const openSegmentDetail = async (u: UserDay, seg: Segment) => {
+    setDetailUser(u);
+    setDetailSegment(seg);
+    setDetailUseOptimized(true);
     setDetailTitle(
       `${maskPhone(u.phone)} · ${dayjs(seg.start_time).format('HH:mm')}–${dayjs(seg.end_time).format('HH:mm')} · ${seg.point_count} 点`,
     );
@@ -134,7 +189,24 @@ export default function TrajectoryPage() {
     setDetailLoading(true);
     setDetailPoints([]);
     try {
-      const res = await getTrajectory(u.user_id, seg.start_time, seg.end_time);
+      const res = await getOptimizedTrajectory(u.user_id, seg.start_time, seg.end_time);
+      setDetailPoints(res.points || []);
+    } catch (e) {
+      console.error(e);
+      setDetailPoints([]);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const reloadDetailPoints = async (useOptimized: boolean) => {
+    if (!detailUser || !detailSegment) return;
+    setDetailLoading(true);
+    setDetailPoints([]);
+    try {
+      const res = useOptimized
+        ? await getOptimizedTrajectory(detailUser.user_id, detailSegment.start_time, detailSegment.end_time)
+        : await getTrajectory(detailUser.user_id, detailSegment.start_time, detailSegment.end_time);
       setDetailPoints(res.points || []);
     } catch (e) {
       console.error(e);
@@ -147,6 +219,8 @@ export default function TrajectoryPage() {
   const handleCloseDetail = () => {
     setDetailOpen(false);
     setDetailPoints([]);
+    setDetailUser(null);
+    setDetailSegment(null);
   };
 
   const toggleUser = (id: string) => {
@@ -392,8 +466,32 @@ export default function TrajectoryPage() {
 
       <Dialog open={detailOpen} onClose={handleCloseDetail} fullWidth maxWidth="md" keepMounted={false}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 16 }}>{detailTitle}</span>
-          <IconButton onClick={handleCloseDetail} size="small"><Close /></IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {detailTitle}
+            </span>
+            <Box sx={{ display: 'flex', alignItems: 'center', ml: 1, flexShrink: 0 }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800 }}>
+                原始
+              </Typography>
+              <IOSSwitch
+                checked={detailUseOptimized}
+                disabled={detailLoading || !detailUser || !detailSegment}
+                onChange={async (_e, checked) => {
+                  setDetailUseOptimized(checked);
+                  await reloadDetailPoints(checked);
+                }}
+                sx={{ mx: 0.5 }}
+                slotProps={{ input: { 'aria-label': '切换轨迹：优化/原始' } }}
+              />
+              <Typography variant="caption" sx={{ color: brandBlue, fontWeight: 900 }}>
+                优化
+              </Typography>
+            </Box>
+          </Box>
+          <IconButton onClick={handleCloseDetail} size="small">
+            <Close />
+          </IconButton>
         </DialogTitle>
         <DialogContent sx={{ p: 0, height: 420 }}>
           <Box sx={{ position: 'relative', width: '100%', height: 400 }}>
