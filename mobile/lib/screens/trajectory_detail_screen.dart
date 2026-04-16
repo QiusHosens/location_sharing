@@ -36,6 +36,7 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
   bool _mapLoading = true;
   String? _mapError;
   bool _mapReady = false;
+  bool _useOptimized = true;
 
   CoordPoint? _toGcjFromTrajectory(dynamic p) {
     if (p is! Map) return null;
@@ -108,17 +109,16 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
     }
   }
 
-  Future<void> _loadTrajectory() async {
+  Future<void> _loadTrajectory({bool? useOptimized}) async {
+    final useOpt = useOptimized ?? _useOptimized;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final res = await _api.getTrajectory(
-        widget.userId,
-        widget.startIso,
-        widget.endIso,
-      );
+      final res = useOpt
+          ? await _api.getOptimizedTrajectory(widget.userId, widget.startIso, widget.endIso)
+          : await _api.getTrajectory(widget.userId, widget.startIso, widget.endIso);
       if (!mounted) return;
       setState(() {
         _points = (res['points'] as List? ?? [])
@@ -258,6 +258,28 @@ class _TrajectoryDetailScreenState extends State<TrajectoryDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title, style: const TextStyle(fontSize: 16)),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Row(
+              children: [
+                Text('原始', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Switch.adaptive(
+                  value: _useOptimized,
+                  onChanged: _loading
+                      ? null
+                      : (v) async {
+                          setState(() => _useOptimized = v);
+                          await _loadTrajectory(useOptimized: v);
+                        },
+                  activeThumbColor: const Color(0xFF1877F2),
+                  activeTrackColor: const Color(0x331877F2),
+                ),
+                const Text('优化', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF1877F2))),
+              ],
+            ),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

@@ -47,6 +47,25 @@ class LocationApi {
     return res['data'];
   }
 
+  Future<Map<String, dynamic>> getOptimizedTrajectory(
+    String userId,
+    String startTime,
+    String endTime, {
+    double? tolerance,
+    double? maxSpeed,
+    int? smoothRadius,
+  }) async {
+    final res = await _client.get('/trajectory/optimized', params: {
+      'user_id': userId,
+      'start_time': startTime,
+      'end_time': endTime,
+      if (tolerance != null) 'tolerance': tolerance,
+      if (maxSpeed != null) 'max_speed': maxSpeed,
+      if (smoothRadius != null) 'smooth_radius': smoothRadius,
+    });
+    return res['data'];
+  }
+
   /// [date] 格式 YYYY-MM-DD（与后端 UTC 日历日对齐）
   Future<Map<String, dynamic>> getTrajectoryDaySummary(String date) async {
     final res = await _client.get('/trajectory/day-summary', params: {'date': date});
