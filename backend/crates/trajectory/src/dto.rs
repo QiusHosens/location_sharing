@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -22,7 +22,7 @@ pub struct OptimizedTrajectoryQuery {
     pub smooth_radius: Option<usize>,
 }
 
-/// 单日汇总：YYYY-MM-DD（按 UTC 日历日切分，每 2 小时一段共 12 段）
+/// 单日汇总：YYYY-MM-DD（按东八区日历日切分，每 2 小时一段共 12 段）
 #[derive(Debug, Deserialize)]
 pub struct DaySummaryQuery {
     pub date: String,
@@ -47,8 +47,8 @@ pub struct TrajectoryResponse {
 
 #[derive(Debug, Serialize)]
 pub struct TrajectorySegmentSummary {
-    pub start_time: DateTime<Utc>,
-    pub end_time: DateTime<Utc>,
+    pub start_time: DateTime<FixedOffset>,
+    pub end_time: DateTime<FixedOffset>,
     pub point_count: i64,
 }
 

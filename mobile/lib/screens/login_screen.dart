@@ -7,7 +7,6 @@ import '../providers/auth_provider.dart';
 
 /// 与设计稿一致的品牌色（主蓝）
 const _kBrandBlue = Color(0xFF1976D2);
-const _kGuardianSubtitle = 'THE GUARDIAN LINK.';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -285,22 +284,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               color: Color(0xFF111827)),
         ),
       ],
-    );
-  }
-
-  Widget _circleIconButton(
-      {required IconData icon, required VoidCallback onTap}) {
-    return Material(
-      color: const Color(0xFFF3F4F6),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Icon(icon, color: const Color(0xFF374151), size: 26),
-        ),
-      ),
     );
   }
 

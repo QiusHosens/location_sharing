@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use chrono::{DateTime, Duration, FixedOffset, NaiveDate, Utc};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -12,6 +12,7 @@ pub struct TrajectoryService;
 
 const SEGMENT_SECS: i64 = 2 * 3600;
 const SEGMENTS_PER_DAY: usize = 12;
+const EAST8_OFFSET_SECS: i32 = 8 * 3600;
 
 impl TrajectoryService {
     /// 当前用户可查看轨迹的用户：本人、同家庭组成员、向自己共享了位置的成员
@@ -100,7 +101,7 @@ impl TrajectoryService {
         })
     }
 
-    /// 指定 UTC 日历日内，按用户、按 2 小时分段汇总轨迹点数量（用于列表；详情仍用 [Self::query]）
+    /// 指定东八区日历日内，按用户、按 2 小时分段汇总轨迹点数量（用于列表；详情仍用 [Self::query]）
     pub async fn query_day_summary(
         db: &PgPool,
         viewer_id: Uuid,
@@ -108,11 +109,18 @@ impl TrajectoryService {
     ) -> Result<DayTrajectorySummaryResponse, AppError> {
         let date = NaiveDate::parse_from_str(date_str.trim(), "%Y-%m-%d")
             .map_err(|_| AppError::BadRequest("date must be YYYY-MM-DD".into()))?;
-        let day_start = date
+        let east8 = FixedOffset::east_opt(EAST8_OFFSET_SECS)
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("invalid timezone offset")))?;
+        let day_start_local = date
             .and_hms_opt(0, 0, 0)
             .ok_or_else(|| AppError::BadRequest("invalid date".into()))?
-            .and_utc();
-        let day_end = day_start + Duration::days(1);
+            .and_local_timezone(east8)
+            .single()
+            .ok_or_else(|| AppError::BadRequest("invalid local date".into()))?;
+        let day_end_local = day_start_local + Duration::days(1);
+        // DB 中以绝对时间存储，查询边界统一转换为 UTC
+        let day_start_utc = day_start_local.with_timezone(&Utc);
+        let day_end_utc = day_end_local.with_timezone(&Utc);
 
         let user_ids = Self::visible_user_ids(db, viewer_id).await?;
         if user_ids.is_empty() {
@@ -130,8 +138,8 @@ impl TrajectoryService {
              ORDER BY lr.user_id, lr.recorded_at",
         )
         .bind(&user_ids)
-        .bind(day_start)
-        .bind(day_end)
+        .bind(day_start_utc)
+        .bind(day_end_utc)
         .fetch_all(db)
         .await?;
 
@@ -150,7 +158,8 @@ impl TrajectoryService {
             });
             acc.phone = phone;
             acc.nickname = nickname;
-            let offset = (ts - day_start).num_seconds();
+            let ts_local = ts.with_timezone(&east8);
+            let offset = (ts_local - day_start_local).num_seconds();
             if offset < 0 {
                 continue;
             }
@@ -167,8 +176,8 @@ impl TrajectoryService {
                     if a.counts[i] == 0 {
                         continue;
                     }
-                    let seg_start = day_start + Duration::seconds(i as i64 * SEGMENT_SECS);
-                    let seg_end = day_start + Duration::seconds((i as i64 + 1) * SEGMENT_SECS);
+                    let seg_start = day_start_local + Duration::seconds(i as i64 * SEGMENT_SECS);
+                    let seg_end = day_start_local + Duration::seconds((i as i64 + 1) * SEGMENT_SECS);
                     segments.push(TrajectorySegmentSummary {
                         start_time: seg_start,
                         end_time: seg_end,
