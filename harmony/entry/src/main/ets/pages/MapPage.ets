@@ -139,6 +139,7 @@ struct MapPage {
   @State webPageLoaded: boolean = false;
   // 家人状态抽屉：0=展开，越大越向下隐藏（默认完全隐藏）
   @State familySheetOffset: number = 0;
+  @State familySheetDragStartOffset: number = 0;
   private locationService: LocationService = new LocationService();
 
   private webController: webview.WebviewController = new webview.WebviewController();
@@ -360,6 +361,7 @@ struct MapPage {
   toggleFamilySheet(): void {
     const hiddenOffset = this.sheetHeight;
     this.familySheetOffset = this.familySheetOffset >= hiddenOffset ? 0 : hiddenOffset;
+    console.log('sheetHeight:' + this.sheetHeight + ',familySheetOffset:' + this.familySheetOffset);
   }
 
   onNavTap(): void {
@@ -404,40 +406,33 @@ struct MapPage {
           .backgroundColor('#33000000')
         }
 
-        // 右下角悬浮按钮：定位 / 列表（用全屏容器定位，避免跑到中间）
-        Row() {
-          Column() {
-            Button({ type: ButtonType.Circle }) {
-              Text('◎')
-                .fontSize(20)
-                .fontColor(Color.White)
-            }
-            .width(this.fabSize)
-            .height(this.fabSize)
-            .backgroundColor(AppTheme.accentBlue)
-            .shadow({ radius: 10, color: '#00000022', offsetY: 4 })
-            .onClick(() => void this.centerToMe())
-
-            Button({ type: ButtonType.Circle }) {
-              Text('≡')
-                .fontSize(20)
-                .fontColor(Color.White)
-            }
-            .width(this.fabSize)
-            .height(this.fabSize)
-            .margin({ top: 12 })
-            .backgroundColor(AppTheme.brandBlue)
-            .shadow({ radius: 10, color: '#00000022', offsetY: 4 })
-            .onClick(() => this.toggleFamilySheet())
+        // 右下角悬浮按钮：定位 / 列表（绝对定位到右下方）
+        Column() {
+          Button({ type: ButtonType.Circle }) {
+            Text('◎')
+              .fontSize(20)
+              .fontColor(Color.White)
           }
-          .alignItems(HorizontalAlign.Center)
+          .width(this.fabSize)
+          .height(this.fabSize)
+          .backgroundColor(AppTheme.accentBlue)
+          .shadow({ radius: 10, color: '#00000022', offsetY: 4 })
+          .onClick(() => void this.centerToMe())
+
+          Button({ type: ButtonType.Circle }) {
+            Text('≡')
+              .fontSize(20)
+              .fontColor(Color.White)
+          }
+          .width(this.fabSize)
+          .height(this.fabSize)
+          .margin({ top: 12 })
+          .backgroundColor(AppTheme.brandBlue)
+          .shadow({ radius: 10, color: '#00000022', offsetY: 4 })
+          .onClick(() => this.toggleFamilySheet())
         }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.End)
-        .alignItems(VerticalAlign.Bottom)
-        .padding({ right: 16, bottom: this.navHeight })
-        .align(Alignment.BottomStart)
+        .alignItems(HorizontalAlign.Center)
+        .position({ x: '84%', y: '80%' })
 
         // 家人状态抽屉（可下拉收起）
         Column() {
@@ -557,12 +552,18 @@ struct MapPage {
         .shadow({ radius: 20, color: '#00000018', offsetY: -4 })
         // 隐藏态必须“不显示且不可点击”：Visibility.None
         .visibility(this.familySheetOffset >= this.sheetHeight ? Visibility.None : Visibility.Visible)
-        .translate({ x: 0, y: this.familySheetOffset })
+        // 以父容器底边为基准：y=100% 时抽屉顶边在屏幕底边
+        // 再用 translate 控制抽屉展开/收起，避免仅依赖 align 导致中部定位异常
+        .position({ x: 0, y: '100%' })
+        .translate({ x: 0, y: this.familySheetOffset - this.sheetHeight })
         .gesture(
           PanGesture()
+            .onActionStart(() => {
+              this.familySheetDragStartOffset = this.familySheetOffset;
+            })
             .onActionUpdate((e) => {
               const maxOffset = this.sheetHeight;
-              let next = this.familySheetOffset + (e.offsetY as number);
+              let next = this.familySheetDragStartOffset + (e.offsetY as number);
               if (next < 0) {
                 next = 0;
               } else if (next > maxOffset) {
@@ -576,7 +577,6 @@ struct MapPage {
               this.familySheetOffset = this.familySheetOffset > hiddenOffset * 0.45 ? hiddenOffset : 0;
             })
         )
-        .align(Alignment.BottomStart)
       }
       .clip(true)
       .layoutWeight(1)

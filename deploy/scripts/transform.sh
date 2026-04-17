@@ -1,7 +1,7 @@
 #!/bin/sh
-docker save -o admin.tar location-sharing-backend:latest
-ctr -n k8s.io images import admin.tar
-rm admin.tar
+docker save -o backend.tar location-sharing-backend:latest
+ctr -n k8s.io images import backend.tar
+rm backend.tar
 
 docker save -o admin.tar location-sharing-admin:latest
 ctr -n k8s.io images import admin.tar

@@ -258,6 +258,8 @@ struct FamilyPage {
                     }
                     .width(56)
                     .height(56)
+                    .justifyContent(FlexAlign.Center)   // 水平居中
+                    .alignItems(VerticalAlign.Center)   // 垂直居中
                     .borderRadius(12)
                     .backgroundColor('#EAF2FF')
 
@@ -322,7 +324,7 @@ struct FamilyPage {
         .fontColor(Color.White)
         .backgroundColor(AppTheme.accentBlue)
         .borderRadius(26)
-        .position({ x: '7%', y: '86%' })
+        .position({ x: '7%', y: '84%' })
         .onClick(() => { this.showCreateDialog = true; })
 
       // 邀请成员弹窗（仅创建者）
